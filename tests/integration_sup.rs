@@ -149,6 +149,59 @@ fn test_stash_and_pop_uncommitted_nonconflicting_changes() {
 }
 
 #[test]
+fn test_stash_and_pop_uncommitted_and_commited_nonconflicting_changes() {
+    let temp = tempfile::tempdir().unwrap();
+    let repo1 = temp.path().join("repo1");
+    let repo2 = temp.path().join("repo2");
+    fs::create_dir(&repo1).unwrap();
+    fs::create_dir(&repo2).unwrap();
+
+    // init repo1
+    run_cmd(&repo1, &["init"]);
+    run_cmd(&repo1, &["config", "user.email", "test@example.com"]);
+    run_cmd(&repo1, &["config", "user.name", "Test"]);
+    fs::write(repo1.join("file.txt"), "initial\n").unwrap();
+    fs::write(repo1.join("another_file.txt"), "another_initial\n").unwrap();
+    run_cmd(&repo1, &["add", "."]);
+    run_cmd(&repo1, &["commit", "-m", "initial"]);
+
+    // clone repo1 to repo2
+    let repo1_url = file_url(&repo1);
+    run_cmd(&repo2, &["clone", &repo1_url, "."]);
+    run_cmd(&repo2, &["config", "user.email", "test@example.com"]);
+    run_cmd(&repo2, &["config", "user.name", "Test"]);
+
+    // change repo1
+    fs::write(repo1.join("file.txt"), "updated\n").unwrap();
+    run_cmd(&repo1, &["add", "."]);
+    run_cmd(&repo1, &["commit", "-m", "update"]);
+
+    // make uncommitted change in repo2
+    fs::write(repo2.join("file2.txt"), "localnewfile\n").unwrap();
+
+    // make committed change in repo2
+    fs::write(repo2.join("another_file.txt"), "local_change\n").unwrap();
+    run_cmd(&repo2, &["add", "another_file.txt"]);
+    run_cmd(&repo2, &["commit", "-m", "local change"]);
+
+    // run sup in repo2
+    run_sup(&repo2, &[], false);
+
+    // check repo2 file has local change (should be popped back)
+    let content = file_content(&repo2.join("file2.txt"));
+    assert_eq!(content, "localnewfile\n");
+
+    // check repo2 another_file.txt has local change (should remain during merge)
+    let content = file_content(&repo2.join("another_file.txt"));
+    assert_eq!(content, "local_change\n");
+
+    // check repo2 file.txt is updated
+    let content = file_content(&repo2.join("file.txt"));
+    assert_eq!(content, "updated\n");
+}
+
+
+#[test]
 fn test_stash_and_pop_uncommitted_conflicting_changes() {
     let temp = tempfile::tempdir().unwrap();
     let repo1 = temp.path().join("repo1");

@@ -8,7 +8,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
-WIP
+### Fixed
+
+- Fixed a bug where working directory would not contain pulled changes.
 
 ## [0.0.3] - 2025-07-19
 

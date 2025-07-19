@@ -348,6 +348,11 @@ pub fn run_sup(r#continue: bool, abort: bool, version: bool) -> Result<()> {
             anyhow::bail!("git pull failed: {e}");
         }
     }
+    debug!("Checking out the head with force");
+    // checking out the head to ensure that index and working directory are clean
+    repo.checkout_head(Some(
+        git2::build::CheckoutBuilder::default().force(),
+    ))?;
     state = SupState::InProgress {
         stash_created,
         original_head: original_head.clone(),
