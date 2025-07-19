@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+WIP
+
+## [0.0.4] - 2025-07-19
+
 ### Fixed
 
 - Fixed a bug where working directory would not contain pulled changes.
@@ -36,7 +40,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - Basic functionality to stash uncommitted changes, pull from remote, and restore changes.
 
 <!-- next-url -->
-[Unreleased]: https://github.com/strowk/sup/compare/v0.0.3...HEAD
+[Unreleased]: https://github.com/strowk/sup/compare/v0.0.4...HEAD
+[0.0.4]: https://github.com/strowk/sup/compare/v0.0.3...v0.0.4
 [0.0.3]: https://github.com/strowk/sup/compare/v0.0.2...v0.0.3
 [0.0.2]: https://github.com/strowk/sup/compare/v0.0.1...v0.0.2
 [0.0.1]: https://github.com/strowk/sup/releases/tag/v0.0.1
