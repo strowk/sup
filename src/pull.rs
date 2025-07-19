@@ -33,13 +33,13 @@ fn do_fetch<'a>(
     // Print out our transfer progress.
     cb.transfer_progress(|stats| {
         if stats.received_objects() == stats.total_objects() {
-            tracing::info!(
+            tracing::debug!(
                 "Resolving deltas {}/{}",
                 stats.indexed_deltas(),
                 stats.total_deltas()
             );
         } else if stats.total_objects() > 0 {
-            tracing::info!(
+            tracing::debug!(
                 "Received {}/{} objects ({}) in {} bytes",
                 stats.received_objects(),
                 stats.total_objects(),
@@ -62,7 +62,7 @@ fn do_fetch<'a>(
     // how many objects we saved from having to cross the network.
     let stats = remote.stats();
     if stats.local_objects() > 0 {
-        tracing::info!(
+        tracing::debug!(
             "Received {}/{} objects in {} bytes (used {} local objects)",
             stats.indexed_objects(),
             stats.total_objects(),
@@ -70,7 +70,7 @@ fn do_fetch<'a>(
             stats.local_objects()
         );
     } else {
-        tracing::info!(
+        tracing::debug!(
             "Received {}/{} objects in {} bytes",
             stats.indexed_objects(),
             stats.total_objects(),
