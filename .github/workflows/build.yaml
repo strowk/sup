@@ -8,6 +8,22 @@ permissions:
   packages: write
 
 jobs:
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache
+        uses: actions/cache@v3
+        with:
+          key: build-${{matrix.target}}
+          path: |
+            ./target
+            ~/.cargo
+            ./cross
+      - name: Run tests
+        run: cargo test
+
   build:
     runs-on: ubuntu-latest
     strategy:
