@@ -18,31 +18,16 @@ tempfile = "3"
 # Removing ssh support for darwin, as openssl
 # cannot be built for darwin:
 
-[target.aarch64-apple-darwin.dependencies]
-git2 = { version= "0.20.2", default-features = false }
-
-[target.x86_64-apple-darwin.dependencies]
+[target.'cfg(target_os = "darwin")'.dependencies]
 git2 = { version= "0.20.2", default-features = false }
 
 # In linux and windows targets openssl can be built
 # with vendored feature, so we can use git2 with ssh support:
 
-[target.x86_64-unknown-linux-gnu.dependencies]
+[target.'cfg(target_os = "linux")'.dependencies]
 openssl = { version = "0.10", features = ["vendored"] }
 git2 = "0.20.2"
 
-[target.aarch64-unknown-linux-gnu.dependencies]
-openssl = { version = "0.10", features = ["vendored"] }
-git2 = "0.20.2"
-
-[target.x86_64-unknown-linux-musl.dependencies]
-openssl = { version = "0.10", features = ["vendored"] }
-git2 = "0.20.2"
-
-[target.aarch64-unknown-linux-musl.dependencies]
-openssl = { version = "0.10", features = ["vendored"] }
-git2 = "0.20.2"
-
-[target.x86_64-pc-windows-gnu.dependencies]
+[target.'cfg(target_os = "windows")'.dependencies]
 openssl = { version = "0.10", features = ["vendored"] }
 git2 = "0.20.2"
