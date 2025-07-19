@@ -45,3 +45,53 @@ sup --abort        # Abort and restore previous state
 - Avoids losing or overwriting local changes during a pull.
 - Handles complex scenarios (conflicts, untracked files, interrupted pulls) automatically.
 - Makes it easy to recover from mistakes or interruptions.
+
+## Installation
+
+### Windows with [Scoop](https://github.com/ScoopInstaller/Scoop)
+
+```bash
+scoop install https://raw.githubusercontent.com/strowk/sup/main/scoop/sup.json
+```
+
+, or if you already have it installed with scoop:
+
+```bash
+scoop update sup
+```
+
+### With bash script
+
+In bash shell run:
+
+```bash
+curl -s https://raw.githubusercontent.com/strowk/sup/main/install.sh | bash
+```
+
+Should work in Linux bash, Windows Git Bash and MacOS.
+For Windows users: you might need to start Git Bash from Administrator.
+
+#### Disabling sudo
+
+By default the script would try to install sup to `/usr/local/bin` and would require sudo rights for that,
+but you can disable this behavior by setting `NO_SUDO` environment variable:
+
+```bash
+curl -s https://raw.githubusercontent.com/strowk/sup/main/install.sh | NO_SUDO=1 bash
+```
+
+Sudo is disabled by default for Windows Git Bash.
+
+### Manually
+
+Head to [latest release](https://github.com/strowk/sup/releases/latest), download archive for your OS/arch, unpack it and put binary somewhere in your PATH.
+
+### From sources
+
+If your system/architecture is not supported by the script above,
+you can install Rust and install sup from sources:
+
+```bash
+git clone https://github.com/strowk/sup
+cargo install --path ./sup
+```
