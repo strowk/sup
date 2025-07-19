@@ -52,13 +52,13 @@ sup --abort        # Abort and restore previous state
 
 ### Windows with [Scoop](https://github.com/ScoopInstaller/Scoop)
 
-```bash
+```sh
 scoop install https://raw.githubusercontent.com/strowk/sup/main/scoop/sup.json
 ```
 
 , or if you already have it installed with scoop:
 
-```bash
+```sh
 scoop update sup
 ```
 
