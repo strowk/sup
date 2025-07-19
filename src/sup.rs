@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use std::fs::OpenOptions;
 use git2::{ErrorCode, Repository, StashFlags};
 use serde::{Deserialize, Serialize};
 use serde_json;
@@ -8,6 +9,7 @@ use std::path::Path;
 use tracing::{error, info, warn};
 
 const STATE_FILE: &str = ".git/sup_state";
+const LOCK_FILE: &str = ".git/sup.lock";
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 #[serde(from = "SupStateSerde", into = "SupStateSerde", rename_all = "snake_case")]
@@ -92,6 +94,24 @@ impl SupState {
 
 pub fn run_sup(r#continue: bool, abort: bool) -> Result<()> {
     tracing_subscriber::fmt::init();
+    // Acquire lock file to prevent concurrent sup runs
+    let lock_path = Path::new(LOCK_FILE);
+    let lock_file = match OpenOptions::new().write(true).create_new(true).open(lock_path) {
+        Ok(f) => f,
+        Err(e) => {
+            return Err(anyhow::anyhow!(
+                "Another sup process is running ({} exists). Aborting.", LOCK_FILE
+            ).context(e));
+        }
+    };
+    // Ensure lock file is removed at the end (even on panic)
+    struct LockGuard<'a> { path: &'a Path }
+    impl<'a> Drop for LockGuard<'a> {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_file(self.path);
+        }
+    }
+    let _lock_guard = LockGuard { path: lock_path };
     let mut state = SupState::load()?;
     if abort {
         info!("Aborting and rolling back operation");
@@ -377,5 +397,6 @@ pub fn run_sup(r#continue: bool, abort: bool) -> Result<()> {
     }
     info!("Operation completed successfully");
     SupState::clear()?;
+    // LockGuard will remove the lock file here
     Ok(())
 }
