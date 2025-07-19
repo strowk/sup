@@ -1,4 +1,6 @@
-# sup: `git stash && git pull && git stash pop` with recovery
+# sup: trunk based development CLI tool
+
+`git stash && git pull && git stash pop` with recovery (`--abort` and `--continue`)
 
 `sup` is a command-line tool for safely synchronizing your local git repository with its remote, even when you have uncommitted or untracked changes. It automates the process of stashing, pulling, and restoring your work, and provides robust handling for conflicts and interruptions.
 
