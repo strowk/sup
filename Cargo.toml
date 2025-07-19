@@ -15,10 +15,10 @@ tracing-subscriber = "0.3.19"
 [dev-dependencies]
 tempfile = "3"
 
-# Removing ssh support for darwin, as openssl
-# cannot be built for darwin:
+# Removing ssh support for macos, as openssl
+# cannot be built for macos:
 
-[target.'cfg(target_os = "darwin")'.dependencies]
+[target.'cfg(target_os = "macos")'.dependencies]
 git2 = { version= "0.20.2", default-features = false }
 
 # In linux and windows targets openssl can be built
