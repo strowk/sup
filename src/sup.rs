@@ -7,7 +7,7 @@ use serde_json;
 use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::Path;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 const STATE_FILE: &str = ".git/sup_state";
 const LOCK_FILE: &str = ".git/sup.lock";
@@ -221,11 +221,11 @@ pub fn run_sup(r#continue: bool, abort: bool, version: bool) -> Result<()> {
                     repo.commit(Some("HEAD"), &sig, &sig, msg, &tree, &parent_refs)?;
                     repo.cleanup_state()?;
                     info!("Merge commit created and merge state cleaned up");
-                    // Ensure index is clean before applying stash
-                    repo.reset(&repo.head()?.peel_to_commit()?.as_object(), git2::ResetType::Mixed, None)?;
                 }
                 // 2. Apply stash if it was created
                 if stash_created {
+                    // Ensure index is clean before applying stash
+                    repo.reset(&repo.head()?.peel_to_commit()?.as_object(), git2::ResetType::Mixed, None)?;
                     info!("Applying stashed changes after merge");
                     // Use stash_apply and only drop if no conflicts
                     match repo.stash_apply(0, None) {
@@ -355,16 +355,12 @@ pub fn run_sup(r#continue: bool, abort: bool, version: bool) -> Result<()> {
     state.save()?;
 
     if stash_created {
-        info!("Resetting index to HEAD before applying stashed changes");
-        repo.reset(
-            &repo.head()?.peel_to_commit()?.as_object(),
-            git2::ResetType::Mixed,
-            None,
-        )?;
+        // Ensure index is clean before applying stashed changes
+        repo.reset(&repo.head()?.peel_to_commit()?.as_object(), git2::ResetType::Mixed, None)?;
         info!("Applying stashed changes");
         match repo.stash_apply(0, None) {
             Ok(_) => {
-                info!("Stash applied");
+                debug!("Stash applied, checking for conflicts");
                 // Check for conflicts after stash pop
                 let mut has_conflicts = false;
                 let statuses = repo.statuses(None)?;

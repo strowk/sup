@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Corrected bug when wrong remote spec was used when pulling changes.
+
+### Added
+
 - Added support for showing version information with `--version/-v` flag.
 
 ## [0.0.2] - 2025-07-19

@@ -26,6 +26,7 @@ fn do_fetch<'a>(
     repo: &'a git2::Repository,
     refs: &[&str],
     remote: &'a mut git2::Remote,
+    remote_tracking_ref: &str,
 ) -> Result<git2::AnnotatedCommit<'a>, git2::Error> {
     let mut cb = git2::RemoteCallbacks::new();
 
@@ -77,8 +78,9 @@ fn do_fetch<'a>(
         );
     }
 
-    let fetch_head = repo.find_reference("FETCH_HEAD")?;
-    Ok(repo.reference_to_annotated_commit(&fetch_head)?)
+    // After fetch, return the AnnotatedCommit for the remote-tracking branch
+    let fetch_ref = repo.find_reference(remote_tracking_ref)?;
+    Ok(repo.reference_to_annotated_commit(&fetch_ref)?)
 }
 
 fn fast_forward(
@@ -151,6 +153,7 @@ fn do_merge<'a>(
     // 1. do a merge analysis
     let analysis = repo.merge_analysis(&[&fetch_commit])?;
 
+    tracing::debug!("Merge analysis: {:?}", analysis.0);
     // 2. Do the appopriate merge
     if analysis.0.is_fast_forward() {
         tracing::info!("Doing a fast forward");
@@ -192,9 +195,14 @@ fn do_merge<'a>(
 pub(crate) fn pull_run(args: &Args) -> Result<(), git2::Error> {
     let remote_name = args.arg_remote.as_ref().map(|s| &s[..]).unwrap_or("origin");
     let remote_branch = args.arg_branch.as_ref().map(|s| &s[..]).unwrap_or("master");
+    tracing::debug!("Pulling from remote: {}/{}", remote_name, remote_branch);
     let repo = Repository::open(".")?;
     let mut remote = repo.find_remote(remote_name)?;
-    let fetch_commit = do_fetch(&repo, &[remote_branch], &mut remote)?;
+
+    // Build refspec: refs/heads/main:refs/remotes/origin/main
+    let refspec = format!("refs/heads/{}:refs/remotes/{}/{}", remote_branch, remote_name, remote_branch);
+    let remote_refname = format!("refs/remotes/{}/{}", remote_name, remote_branch);
+    let fetch_commit = do_fetch(&repo, &[&refspec], &mut remote, &remote_refname)?;
     do_merge(&repo, &remote_branch, fetch_commit)
 }
 

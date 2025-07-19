@@ -24,6 +24,7 @@ fn run_sup(dir: &Path, extra_args: &[&str], expect_failure: bool) {
     // print git status before running sup
     let git_status = Command::new("git")
         .arg("status")
+        .arg("-v")
         .current_dir(dir)
         .output()
         .expect("failed to run git status");
@@ -45,6 +46,7 @@ fn run_sup(dir: &Path, extra_args: &[&str], expect_failure: bool) {
     // print git status after running sup
     let git_status = Command::new("git")
         .arg("status")
+        .arg("-v")
         .current_dir(&dir)
         .output()
         .expect("failed to run git status");
