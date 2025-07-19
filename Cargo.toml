@@ -12,7 +12,21 @@ serde_json = "1.0.140"
 structopt = "0.3.26"
 tracing = "0.1.41"
 tracing-subscriber = "0.3.19"
-openssl = { version = "0.10", features = ["vendored"] }
 
 [dev-dependencies]
 tempfile = "3"
+
+# Removing ssh support for darwin, as openssl
+# cannot be built for darwin:
+
+[target.'cfg(target_os = "darwin")'.dependencies]
+git2 = { version= "0.20.2", default-features = false }
+
+# In linux and windows targets openssl can be built
+# with vendored feature, so we can use git2 with ssh support:
+
+[target.'cfg(target_os = "linux")'.dependencies]
+openssl = { version = "0.10", features = ["vendored"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+openssl = { version = "0.10", features = ["vendored"] }
