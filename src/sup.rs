@@ -101,7 +101,7 @@ pub fn run_sup(r#continue: bool, abort: bool, version: bool) -> Result<()> {
     tracing_subscriber::fmt::init();
     // Acquire lock file to prevent concurrent sup runs
     let lock_path = Path::new(LOCK_FILE);
-    let lock_file = match OpenOptions::new().write(true).create_new(true).open(lock_path) {
+    let _lock_file = match OpenOptions::new().write(true).create_new(true).open(lock_path) {
         Ok(f) => f,
         Err(e) => {
             return Err(anyhow::anyhow!(
