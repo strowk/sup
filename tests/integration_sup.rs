@@ -6,7 +6,7 @@ fn file_url(path: &Path) -> String {
     // On Unix, always ensure exactly one leading slash after file://
     #[cfg(unix)]
     {
-        p = p.trim_start_matches('/');
+        p = p.trim_start_matches('/').to_string();
     }
     format!("file:///{}", p)
 }
