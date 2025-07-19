@@ -1,7 +1,6 @@
 # Disable publishing to crates.io, it is done by GitHub Actions
 publish = false
 
-
 # Replace Unreleased header with version number and release date in CHANGELOG.md
 [[pre-release-replacements]]
 file = "CHANGELOG.md"
