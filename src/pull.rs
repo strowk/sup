@@ -55,7 +55,7 @@ fn do_fetch<'a>(
     // Always fetch all tags.
     // Perform a download and also update tips
     fo.download_tags(git2::AutotagOption::All);
-    tracing::info!("Fetching {} for repo", remote.name().unwrap());
+    tracing::debug!("Fetching {} for repo", remote.name().unwrap());
     remote.fetch(refs, Some(&mut fo), None)?;
 
     // If there are local objects (we got a thin pack), then tell the user
@@ -187,7 +187,7 @@ fn do_merge<'a>(
         let head_commit = repo.reference_to_annotated_commit(&repo.head()?)?;
         normal_merge(&repo, &head_commit, &fetch_commit)?;
     } else {
-        tracing::info!("Nothing to do...");
+        tracing::debug!("Nothing to merge, continue");
     }
     Ok(())
 }
