@@ -3,6 +3,13 @@ fn file_url(path: &Path) -> String {
     if p.starts_with("//?/" ) || p.starts_with("\\\\?\\") {
         p = p.trim_start_matches("//?/").trim_start_matches("\\\\?\\").to_string();
     }
+    // On Unix, ensure only one leading slash after file://
+    #[cfg(unix)]
+    {
+        while p.starts_with('/') && p.chars().nth(1) == Some('/') {
+            p = p[1..].to_string();
+        }
+    }
     format!("file:///{}", p)
 }
 
