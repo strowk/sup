@@ -4,11 +4,11 @@
 
 ## Features
 
-- **Automatic stashing**: Stashes all local changes (including untracked files) before pulling.
-- **Safe pull**: Runs a `git pull` (or equivalent) after stashing, then restores your changes from the stash.
-- **Conflict handling**: If a conflict occurs, you can resolve it and use `sup --continue` to finish the operation.
-- **Abort support**: If you want to roll back, use `sup --abort` to restore your previous state and stashed changes.
-- **State tracking**: Remembers interrupted operations and prevents accidental data loss.
+- 🗃️ **Automatic stashing**: Stashes all local changes (including untracked files) before pulling.
+- ⬇️ **Safe pull**: Runs a `git pull` (or equivalent) after stashing, then restores your changes from the stash.
+- ⚔️ **Conflict handling**: If a conflict occurs, you can resolve it and use `sup --continue` to finish the operation.
+- 🛑 **Abort support**: If you want to roll back, use `sup --abort` to restore your previous state and stashed changes.
+- 📝 **State tracking**: Remembers interrupted operations and prevents accidental data loss.
 
 ## Usage
 
