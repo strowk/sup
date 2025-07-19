@@ -17,6 +17,10 @@ pub struct Cli {
     /// abort and rollback operation
     #[argh(switch)]
     pub abort: bool,
+
+    /// show version
+    #[argh(switch, short = 'v')]
+    pub version: bool,
 }
 
 impl Cli {

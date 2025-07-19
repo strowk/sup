@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use std::fs::OpenOptions;
+use std::process;
 use git2::{ErrorCode, Repository, StashFlags};
 use serde::{Deserialize, Serialize};
 use serde_json;
@@ -92,7 +93,11 @@ impl SupState {
     }
 }
 
-pub fn run_sup(r#continue: bool, abort: bool) -> Result<()> {
+pub fn run_sup(r#continue: bool, abort: bool, version: bool) -> Result<()> {
+    if version {
+        println!("sup version {}", env!("CARGO_PKG_VERSION"));
+        process::exit(0);
+    }
     tracing_subscriber::fmt::init();
     // Acquire lock file to prevent concurrent sup runs
     let lock_path = Path::new(LOCK_FILE);
