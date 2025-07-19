@@ -36,7 +36,7 @@ fn run_sup(dir: &Path, extra_args: &[&str], expect_failure: bool) {
         println!("No SUP STATE found before sup.");
     }
 
-    let exe = env::var("CARGO_BIN_EXE_sup").unwrap_or_else(|_| "target/debug/sup".to_string());
+    let exe = env!("CARGO_BIN_EXE_sup");
     let status = Command::new(exe)
         .args(extra_args)
         .current_dir(dir)
