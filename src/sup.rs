@@ -8,7 +8,7 @@ use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::Path;
 use std::process;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, warn};
 
 const STATE_FILE: &str = ".git/sup_state";
 const LOCK_FILE: &str = ".git/sup.lock";
