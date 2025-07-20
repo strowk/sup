@@ -15,6 +15,9 @@ pub struct Cli {
     pub r#continue: bool,
 
     /// abort and rollback operation
+    /// 
+    /// If an operation was interrupted or you want to cancel it,
+    /// this flag allows you to restore your previous state and stashed changes.
     #[argh(switch)]
     pub abort: bool,
 
@@ -23,6 +26,9 @@ pub struct Cli {
     pub version: bool,
 
     /// commit message for auto-commit after applying stash
+    /// 
+    /// If you want to commit and push your changes after applying the stash,
+    /// you can provide a commit message using this flag.
     #[argh(option, short = 'm')]
     pub message: Option<String>,
 }
