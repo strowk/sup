@@ -325,6 +325,7 @@ pub fn run_sup(
                             .dim(),
                         BOX
                     );
+                    steps_count += 1;
                     // Use stash_apply and only drop if no conflicts
                     match repo.stash_apply(0, None) {
                         Ok(_) => {
@@ -556,6 +557,7 @@ pub fn run_sup(
                 .dim(),
             BOX
         );
+        steps_count += 1;
         match repo.stash_apply(0, None) {
             Ok(_) => {
                 debug!("Stash applied, checking for conflicts");

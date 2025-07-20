@@ -8,7 +8,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
-WIP
+### Fixed
+
+- Corrected wrong printed output when counting completed steps.
 
 ## [0.1.1] - 2025-07-20
 
