@@ -8,7 +8,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
-WIP
+### Fixed
+
+- Corrected behavior when commit or push fails due to hook error and after fix, state is not empty and blocks further execution.
 
 ## [0.1.0] - 2025-07-20
 

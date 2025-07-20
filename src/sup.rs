@@ -372,12 +372,24 @@ pub fn run_sup(
                                     let sig = repo.signature()?;
                                     let parent_commit = repo.head()?.peel_to_commit()?;
                                     // Run pre-commit hook if present
-                                    hooks::run_hook(&repo, "pre-commit", &[])?;
+                                    if let Err(e) = hooks::run_hook(&repo, "pre-commit", &[]) {
+                                        error!("pre-commit hook failed: {}", e);
+                                        state = SupState::Idle;
+                                        state.save()?;
+                                        return Err(e);
+                                    }
                                     // Prepare commit message file for commit-msg hook
                                     let mut commit_msg_file = tempfile::NamedTempFile::new()?;
                                     commit_msg_file.write_all(msg.as_bytes())?;
                                     let commit_msg_path = commit_msg_file.path().to_str().unwrap();
-                                    hooks::run_hook(&repo, "commit-msg", &[commit_msg_path])?;
+                                    if let Err(e) =
+                                        hooks::run_hook(&repo, "commit-msg", &[commit_msg_path])
+                                    {
+                                        error!("commit-msg hook failed: {}", e);
+                                        state = SupState::Idle;
+                                        state.save()?;
+                                        return Err(e);
+                                    }
                                     repo.commit(
                                         Some("HEAD"),
                                         &sig,
@@ -397,7 +409,12 @@ pub fn run_sup(
                                             ROCKET,
                                             branch
                                         );
-                                        push(&repo, branch)?;
+                                        if let Err(e) = push(&repo, branch) {
+                                            error!("Failed to push branch '{}': {}", branch, e);
+                                            state = SupState::Idle;
+                                            state.save()?;
+                                            return Err(e);
+                                        }
                                     }
                                 }
                                 debug!("Dropping stash entry after successful apply");
@@ -574,12 +591,22 @@ pub fn run_sup(
                         );
                         steps_count += 1;
                         // Run pre-commit hook if present
-                        hooks::run_hook(&repo, "pre-commit", &[])?;
+                        if let Err(e) = hooks::run_hook(&repo, "pre-commit", &[]) {
+                            error!("pre-commit hook failed: {}", e);
+                            state = SupState::Idle;
+                            state.save()?;
+                            return Err(e);
+                        }
                         // Prepare commit message file for commit-msg hook
                         let mut commit_msg_file = tempfile::NamedTempFile::new()?;
                         commit_msg_file.write_all(msg.as_bytes())?;
                         let commit_msg_path = commit_msg_file.path().to_str().unwrap();
-                        hooks::run_hook(&repo, "commit-msg", &[commit_msg_path])?;
+                        if let Err(e) = hooks::run_hook(&repo, "commit-msg", &[commit_msg_path]) {
+                            error!("commit-msg hook failed: {}", e);
+                            state = SupState::Idle;
+                            state.save()?;
+                            return Err(e);
+                        }
 
                         let mut index = repo.index()?;
                         index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None)?;
@@ -600,7 +627,12 @@ pub fn run_sup(
                                 ROCKET,
                                 branch
                             );
-                            push(&repo, branch)?;
+                            if let Err(e) = push(&repo, branch) {
+                                error!("Failed to push branch '{}': {}", branch, e);
+                                state = SupState::Idle;
+                                state.save()?;
+                                return Err(e);
+                            }
                         }
                     }
                 }
