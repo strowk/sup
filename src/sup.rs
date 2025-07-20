@@ -351,12 +351,11 @@ pub fn run_sup(
                                 // If message is present, stage and commit all changes
                                 if let Some(ref msg) = message {
                                     println!(
-                                        "{} {}Committing stashed changes: {}",
+                                        "{} {}Committing stashed changes",
                                         style(format!("[{}/{}]", steps_count, steps_total))
                                             .bold()
                                             .dim(),
-                                        FLOPPY_DISK,
-                                        msg
+                                        FLOPPY_DISK
                                     );
                                     let mut index = repo.index()?;
                                     index.add_all(
@@ -541,10 +540,9 @@ pub fn run_sup(
                     // If --message/-m is provided, stage and commit all changes
                     if let Some(ref msg) = message {
                         println!(
-                            "{} {}Committing stashed changes: {}",
+                            "{} {}Committing stashed changes",
                             style(format!("[{}/{}]", steps_count, total_steps)).bold().dim(),
-                            CHECKMARK,
-                            msg
+                            CHECKMARK
                         );
                         let mut index = repo.index()?;
                         index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None)?;
