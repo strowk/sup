@@ -1,0 +1,52 @@
+on:
+  workflow_dispatch:
+
+jobs:
+  package-debian:
+    permissions:
+      pages: write
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y reprepro dpkg-dev curl jq gnupg debsigs
+
+      - name: Import GPG key
+        run: |
+          echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+          echo "$KEY_ID:6:" |  gpg --batch --import-ownertrust --pinentry-mode=loopback
+
+      - name: Create APT repository
+        run: |
+          curl -s https://raw.githubusercontent.com/strowk/sup/main/install.sh | bash
+          mkdir -p target/x86_64-unknown-linux-gnu/release
+          cp /usr/local/bin/sup target/x86_64-unknown-linux-gnu/release/sup
+          docker build -t sup-cargo-deb -f packages/debian/Dockerfile .
+          version=$(sup --version | awk '{print $3}')
+          docker run --rm -v $(pwd -W)/packages/debian:/package sup-cargo-deb bash -c "cat /app/target/x86_64-unknown-linux-gnu/debian/sup_${version}-1_amd64.deb" > target/build-deb/sup_${version}-1_amd64.deb
+          debsigs -v --gpgopts="--batch --no-tty --pinentry-mode=loopback" --sign=origin --default-key="$KEY_ID" target/x86_64-unknown-linux-gnu/debian/sup_${version}-1_amd64.deb
+          mkdir -p repo/conf
+          echo "Origin: GitHub" >repo/conf/distributions
+          echo "Label: GitHub UV" >>repo/conf/distributions
+          echo "Suite: stable" >>repo/conf/distributions
+          echo "Codename: ${DISTRIBUTION}" >>repo/conf/distributions
+          echo "Components: ${COMPONENT}" >>repo/conf/distributions
+          echo "Architectures: ${ARCHITECTURE}" >>repo/conf/distributions
+          echo "SignWith: $KEY_ID" >>repo/conf/distributions
+          cp target/x86_64-unknown-linux-gnu/debian/sup_${version}-1_amd64.deb sup_${version}-1_amd64.deb
+          reprepro -Vb repo includedeb any "sup_${version}-1_amd64.deb"
+          gpg --export $KEY_ID > repo/pubkey.gpg
+          
+          # TODO: Generate index.html
+          # cp index.html repo/
+
+      - name: Deploy APT repository to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./repo

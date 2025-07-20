@@ -2,6 +2,7 @@
 name = "sup"
 version = "0.1.2"
 edition = "2021"
+description = "A tool for Trunk-Based Development to safely and quickly push code to git repository."
 
 [dependencies]
 anyhow = "1.0.98"
@@ -37,3 +38,7 @@ git2 = "0.20.2"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 git2 = "0.20.2"
+
+[package.metadata.deb]
+maintainer = "strowk <25692644+strowk@users.noreply.github.com>"
+section = "utils"
