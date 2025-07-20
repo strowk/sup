@@ -1,11 +1,14 @@
 use anyhow::{Context, Result};
+use tempfile;
+use std::io::Write;
+use crate::hooks;
 use console::{style, Emoji};
 use git2::{ErrorCode, Repository, StashFlags};
 use serde::{Deserialize, Serialize};
 use serde_json;
 use std::fs::OpenOptions;
 use std::fs::{self, File};
-use std::io::{Read, Write};
+use std::io::Read;
 use std::path::Path;
 use std::process;
 use tracing::{debug, error, warn};
@@ -370,6 +373,13 @@ pub fn run_sup(
                                     let tree = repo.find_tree(tree_id)?;
                                     let sig = repo.signature()?;
                                     let parent_commit = repo.head()?.peel_to_commit()?;
+                                    // Run pre-commit hook if present
+                                    hooks::run_hook(&repo, "pre-commit", &[])?;
+                                    // Prepare commit message file for commit-msg hook
+                                    let mut commit_msg_file = tempfile::NamedTempFile::new()?;
+                                    commit_msg_file.write_all(msg.as_bytes())?;
+                                    let commit_msg_path = commit_msg_file.path().to_str().unwrap();
+                                    hooks::run_hook(&repo, "commit-msg", &[commit_msg_path])?;
                                     repo.commit(
                                         Some("HEAD"),
                                         &sig,
@@ -389,6 +399,8 @@ pub fn run_sup(
                                             ROCKET,
                                             branch
                                         );
+                                        // Run pre-push hook if present
+                                        hooks::run_hook(&repo, "pre-push", &["origin"])?;
                                         let mut remote = repo.find_remote("origin")?;
                                         let refspec = format!("refs/heads/{}:refs/heads/{}", branch, branch);
                                         let mut callbacks = git2::RemoteCallbacks::new();
@@ -590,6 +602,14 @@ pub fn run_sup(
                             CHECKMARK
                         );
                         steps_count += 1;
+                         // Run pre-commit hook if present
+                        hooks::run_hook(&repo, "pre-commit", &[])?;
+                        // Prepare commit message file for commit-msg hook
+                        let mut commit_msg_file = tempfile::NamedTempFile::new()?;
+                        commit_msg_file.write_all(msg.as_bytes())?;
+                        let commit_msg_path = commit_msg_file.path().to_str().unwrap();
+                        hooks::run_hook(&repo, "commit-msg", &[commit_msg_path])?;
+
                         let mut index = repo.index()?;
                         index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None)?;
                         index.write()?;
@@ -609,6 +629,8 @@ pub fn run_sup(
                                 ROCKET,
                                 branch
                             );
+                            // Run pre-push hook if present
+                            hooks::run_hook(&repo, "pre-push", &["origin"])?;
                             let mut remote = repo.find_remote("origin")?;
                             let refspec = format!("refs/heads/{}:refs/heads/{}", branch, branch);
                             let mut callbacks = git2::RemoteCallbacks::new();

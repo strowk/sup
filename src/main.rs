@@ -1,6 +1,7 @@
 mod cli;
 mod sup;
 mod pull;
+mod hooks;
 
 fn main() {
     let cli = cli::Cli::parse();

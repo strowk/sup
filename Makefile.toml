@@ -13,6 +13,10 @@ script = '''
 npm ci --silent
 '''
 
+[tasks.test-linux]
+command = "cross"
+args = ["test", "--target", "x86_64-unknown-linux-gnu"]
+
 [tasks.lint-changelog]
 dependencies = ["install-changelog-lint-deps"]
 command = "node"
