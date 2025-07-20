@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+WIP
+
+## [0.1.1] - 2025-07-20
+
 ### Fixed
 
 - Corrected behavior when commit or push fails due to hook error and after fix, state is not empty and blocks further execution.
@@ -57,7 +61,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - Basic functionality to stash uncommitted changes, pull from remote, and restore changes.
 
 <!-- next-url -->
-[Unreleased]: https://github.com/strowk/sup/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/strowk/sup/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/strowk/sup/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/strowk/sup/compare/v0.0.4...v0.1.0
 [0.0.4]: https://github.com/strowk/sup/compare/v0.0.3...v0.0.4
 [0.0.3]: https://github.com/strowk/sup/compare/v0.0.2...v0.0.3
