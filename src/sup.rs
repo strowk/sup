@@ -8,7 +8,7 @@ use std::fs::{self, File};
 use std::io::Read;
 use std::io::Write;
 use std::path::Path;
-use std::{any, process};
+use std::process;
 use tracing::{debug, error, warn};
 
 const STATE_FILE: &str = ".git/sup_state";
@@ -397,8 +397,7 @@ pub fn run_sup(
                                             ROCKET,
                                             branch
                                         );
-                                        // Run pre-push hook if present
-                                        push(&repo, &branch)?;
+                                        push(&repo, branch)?;
                                     }
                                 }
                                 debug!("Dropping stash entry after successful apply");
@@ -601,8 +600,7 @@ pub fn run_sup(
                                 ROCKET,
                                 branch
                             );
-                            
-                            push(&repo, &branch)?;
+                            push(&repo, branch)?;
                         }
                     }
                 }
