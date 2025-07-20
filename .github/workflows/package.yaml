@@ -7,6 +7,10 @@ jobs:
       pages: write
       contents: write
     runs-on: ubuntu-latest
+    env:
+      GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+      KEY_ID: ${{ vars.KEY_ID }}
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
