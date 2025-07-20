@@ -26,15 +26,15 @@ sup -m "Your commit message"  # Short form for --message
 ### Typical Workflow
 
 1. Make local changes (even untracked files).
-2. Run `sup` to pull from remote:
+2. Run `sup` to pull from remote (optionally provide `--message/-m` to commit+push changes at the end):
     - Your changes are stashed.
     - The latest changes are pulled from the remote.
-    - Your changes are reapplied.
+    - Your changes are reapplied, then optionally committed and pushed with the provided message.
 3. If a conflict occurs:
     - Resolve the conflict in your files.
     - Stage the resolved files (`git add ...`).
     - Commit the resolution (`git commit -m "resolve conflict"`).
-    - Run `sup --continue` to reapply your stashed changes.
+    - Run `sup --continue` to reapply your stashed changes and finish the operation (including optional commit+push)
 4. If you want to cancel the operation:
     - Run `sup --abort` to restore your previous state and stashed changes.
 
