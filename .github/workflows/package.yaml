@@ -32,7 +32,7 @@ jobs:
           cp /usr/local/bin/sup target/x86_64-unknown-linux-gnu/release/sup
           docker build -t sup-cargo-deb -f packages/debian/Dockerfile .
           version=$(sup --version | awk '{print $3}')
-          docker run --rm -v $(pwd -W)/packages/debian:/package sup-cargo-deb bash -c "cat /app/target/x86_64-unknown-linux-gnu/debian/sup_${version}-1_amd64.deb" > target/build-deb/sup_${version}-1_amd64.deb
+          docker run --rm -v $(pwd)/packages/debian:/package sup-cargo-deb bash -c "cat /app/target/x86_64-unknown-linux-gnu/debian/sup_${version}-1_amd64.deb" > target/build-deb/sup_${version}-1_amd64.deb
           debsigs -v --gpgopts="--batch --no-tty --pinentry-mode=loopback" --sign=origin --default-key="$KEY_ID" target/x86_64-unknown-linux-gnu/debian/sup_${version}-1_amd64.deb
           mkdir -p repo/conf
           echo "Origin: GitHub" >repo/conf/distributions
