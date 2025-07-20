@@ -47,6 +47,7 @@ sup -m "Your commit message"  # Short form for --message
 
 ## Why Use sup?
 
+- Enables most simplified git flow of Trunk Based Development.
 - Avoids losing or overwriting local changes during a pull.
 - Handles complex scenarios (conflicts, untracked files, interrupted pulls) automatically.
 - Makes it easy to recover from mistakes or interruptions.
