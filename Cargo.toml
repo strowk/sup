@@ -23,12 +23,15 @@ tempfile = "3"
 [target.'cfg(target_os = "macos")'.dependencies]
 git2 = { version= "0.20.2", default-features = false }
 
-# In linux and windows targets openssl can be built
-# with vendored feature, so we can use git2 with ssh support:
+# In linux targets openssl can be built with vendored
+# feature, so we can use git2 with ssh support:
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { version = "0.10", features = ["vendored"] }
 git2 = "0.20.2"
+
+# Windows targets can use git2 with ssh support
+# without building openssl:
 
 [target.'cfg(target_os = "windows")'.dependencies]
 git2 = "0.20.2"
