@@ -13,6 +13,7 @@
  */
 
 use git2::Repository;
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use std::str;
 use structopt::StructOpt;
 
@@ -30,22 +31,33 @@ fn do_fetch<'a>(
 ) -> Result<git2::AnnotatedCommit<'a>, git2::Error> {
     let mut cb = git2::RemoteCallbacks::new();
 
-    // Print out our transfer progress.
-    cb.transfer_progress(|stats| {
+    let m = MultiProgress::new();
+
+    let sty = ProgressStyle::with_template(
+        "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
+    )
+    .unwrap()
+    .progress_chars("=>-");
+    let objects = m.add(ProgressBar::new(0));
+    objects.set_style(sty.clone());
+    objects.set_prefix("Received objects");
+
+    let deltas = m.add(ProgressBar::new(0));
+    deltas.set_style(sty);
+    deltas.set_prefix("Resolved deltas");
+
+    cb.transfer_progress(move |stats| {
+        objects.set_length(stats.total_objects().try_into().unwrap_or(0));
+        deltas.set_length(stats.total_deltas().try_into().unwrap_or(0));
         if stats.received_objects() == stats.total_objects() {
-            tracing::debug!(
-                "Resolving deltas {}/{}",
-                stats.indexed_deltas(),
-                stats.total_deltas()
-            );
+            objects.finish_with_message("Received all objects");
+            let indexed = stats.indexed_deltas().try_into().unwrap_or(0);
+            deltas.set_position(indexed);
+            if deltas.length() == Some(indexed) {
+                deltas.finish_with_message("Resolved all deltas");
+            }
         } else if stats.total_objects() > 0 {
-            tracing::debug!(
-                "Received {}/{} objects ({}) in {} bytes",
-                stats.received_objects(),
-                stats.total_objects(),
-                stats.indexed_objects(),
-                stats.received_bytes()
-            );
+            objects.set_position(stats.indexed_objects().try_into().unwrap_or(0));
         }
         true
     });
@@ -93,7 +105,7 @@ fn fast_forward(
         None => String::from_utf8_lossy(lb.name_bytes()).to_string(),
     };
     let msg = format!("Fast-Forward: Setting {} to id: {}", name, rc.id());
-    tracing::info!("{}", msg);
+    tracing::debug!("{}", msg);
     lb.set_target(rc.id(), &msg)?;
     repo.set_head(&name)?;
     repo.checkout_head(Some(
@@ -156,7 +168,7 @@ fn do_merge<'a>(
     tracing::debug!("Merge analysis: {:?}", analysis.0);
     // 2. Do the appopriate merge
     if analysis.0.is_fast_forward() {
-        tracing::info!("Doing a fast forward");
+        tracing::debug!("Doing a fast forward");
         // do a fast forward
         let refname = format!("refs/heads/{}", remote_branch);
         match repo.find_reference(&refname) {
@@ -183,6 +195,7 @@ fn do_merge<'a>(
             }
         };
     } else if analysis.0.is_normal() {
+        tracing::debug!("Doing a normal merge");
         // do a normal merge
         let head_commit = repo.reference_to_annotated_commit(&repo.head()?)?;
         normal_merge(&repo, &head_commit, &fetch_commit)?;
@@ -200,9 +213,11 @@ pub(crate) fn pull_run(args: &Args) -> Result<(), git2::Error> {
     let mut remote = repo.find_remote(remote_name)?;
 
     // Build refspec: refs/heads/main:refs/remotes/origin/main
-    let refspec = format!("refs/heads/{}:refs/remotes/{}/{}", remote_branch, remote_name, remote_branch);
+    let refspec = format!(
+        "refs/heads/{}:refs/remotes/{}/{}",
+        remote_branch, remote_name, remote_branch
+    );
     let remote_refname = format!("refs/remotes/{}/{}", remote_name, remote_branch);
     let fetch_commit = do_fetch(&repo, &[&refspec], &mut remote, &remote_refname)?;
     do_merge(&repo, &remote_branch, fetch_commit)
 }
-

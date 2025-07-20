@@ -1,19 +1,30 @@
 use anyhow::{Context, Result};
-use std::fs::OpenOptions;
-use std::process;
+use console::{style, Emoji};
 use git2::{ErrorCode, Repository, StashFlags};
 use serde::{Deserialize, Serialize};
 use serde_json;
+use std::fs::OpenOptions;
 use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::Path;
+use std::process;
 use tracing::{debug, error, info, warn};
 
 const STATE_FILE: &str = ".git/sup_state";
 const LOCK_FILE: &str = ".git/sup.lock";
 
+static FLOPPY_DISK: Emoji<'_, '_> = Emoji("🗃️  ", "");
+static DOWN_ARROW: Emoji<'_, '_> = Emoji("⬇️  ", "");
+static CHECKMARK: Emoji<'_, '_> = Emoji("✅  ", "");
+static BOX: Emoji<'_, '_> = Emoji("📦  ", "");
+static RELOAD: Emoji<'_, '_> = Emoji("🔄  ", "");
+
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
-#[serde(from = "SupStateSerde", into = "SupStateSerde", rename_all = "snake_case")]
+#[serde(
+    from = "SupStateSerde",
+    into = "SupStateSerde",
+    rename_all = "snake_case"
+)]
 enum SupState {
     Idle,
     InProgress {
@@ -29,26 +40,22 @@ enum SupState {
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 enum SupStateSerde {
     Idle,
-    InProgress (
-         bool,
-         Option<String>,
-    ),
-    Interrupted (
-        bool,
-        Option<String>,
-    ),
+    InProgress(bool, Option<String>),
+    Interrupted(bool, Option<String>),
 }
 
 impl From<SupState> for SupStateSerde {
     fn from(state: SupState) -> Self {
         match state {
             SupState::Idle => SupStateSerde::Idle,
-            SupState::InProgress { stash_created, original_head } => {
-                SupStateSerde::InProgress(stash_created, original_head)
-            }
-            SupState::Interrupted { stash_created, original_head } => {
-                SupStateSerde::Interrupted(stash_created, original_head)
-            }
+            SupState::InProgress {
+                stash_created,
+                original_head,
+            } => SupStateSerde::InProgress(stash_created, original_head),
+            SupState::Interrupted {
+                stash_created,
+                original_head,
+            } => SupStateSerde::Interrupted(stash_created, original_head),
         }
     }
 }
@@ -57,12 +64,14 @@ impl From<SupStateSerde> for SupState {
     fn from(state: SupStateSerde) -> Self {
         match state {
             SupStateSerde::Idle => SupState::Idle,
-            SupStateSerde::InProgress(stash_created, original_head) => {
-                SupState::InProgress { stash_created, original_head }
-            }
-            SupStateSerde::Interrupted(stash_created, original_head) => {
-                SupState::Interrupted { stash_created, original_head }
-            }
+            SupStateSerde::InProgress(stash_created, original_head) => SupState::InProgress {
+                stash_created,
+                original_head,
+            },
+            SupStateSerde::Interrupted(stash_created, original_head) => SupState::Interrupted {
+                stash_created,
+                original_head,
+            },
         }
     }
 }
@@ -101,16 +110,24 @@ pub fn run_sup(r#continue: bool, abort: bool, version: bool) -> Result<()> {
     tracing_subscriber::fmt::init();
     // Acquire lock file to prevent concurrent sup runs
     let lock_path = Path::new(LOCK_FILE);
-    let _lock_file = match OpenOptions::new().write(true).create_new(true).open(lock_path) {
+    let _lock_file = match OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(lock_path)
+    {
         Ok(f) => f,
         Err(e) => {
             return Err(anyhow::anyhow!(
-                "Another sup process is running ({} exists). Aborting.", LOCK_FILE
-            ).context(e));
+                "Another sup process is running ({} exists). Aborting.",
+                LOCK_FILE
+            )
+            .context(e));
         }
     };
     // Ensure lock file is removed at the end (even on panic)
-    struct LockGuard<'a> { path: &'a Path }
+    struct LockGuard<'a> {
+        path: &'a Path,
+    }
     impl<'a> Drop for LockGuard<'a> {
         fn drop(&mut self) {
             let _ = std::fs::remove_file(self.path);
@@ -119,19 +136,37 @@ pub fn run_sup(r#continue: bool, abort: bool, version: bool) -> Result<()> {
     let _lock_guard = LockGuard { path: lock_path };
     let mut state = SupState::load()?;
     if abort {
-        info!("Aborting and rolling back operation");
         let state_for_abort = state;
         match state_for_abort {
             SupState::Interrupted {
                 stash_created,
                 original_head,
             } => {
+                let mut steps_count = 1;
+                let mut steps_total = 1;
+                if original_head.is_some() {
+                    steps_total += 1;
+                }
+                if stash_created {
+                    steps_total += 1;
+                }
+                println!(
+                    "{} {}Aborting and rolling back operation",
+                    style(
+                        format!("[{}/{}]", steps_count, steps_total)
+                    ).bold().dim(),
+                    RELOAD,
+                );
+                steps_count += 1;
                 if let Some(ref orig_head) = original_head {
                     let repo = Repository::open(".").context("Not a git repository")?;
-                    info!(
-                        "Resetting branch to original commit before pull: {}",
+                    println!(
+                        "{} {}Resetting branch to original commit before pull: {}",
+                        style(format!("[{}/{}]", steps_count, steps_total)).bold().dim(),
+                        FLOPPY_DISK,
                         orig_head
                     );
+                    steps_count += 1;
                     repo.reset(
                         &repo.find_object(
                             git2::Oid::from_str(orig_head)?,
@@ -145,7 +180,11 @@ pub fn run_sup(r#continue: bool, abort: bool, version: bool) -> Result<()> {
                 // Restore stashed changes if any
                 if stash_created {
                     let mut repo = Repository::open(".").context("Not a git repository")?;
-                    info!("Restoring stashed changes after abort");
+                    println!(
+                        "{} {}Restoring stashed changes after abort",
+                        style(format!("[{}/{}]", steps_count, steps_total)).bold().dim(),
+                        BOX,
+                    );
                     // Only pop the stash created by sup (with message 'sup stash')
                     let mut sup_stash_index: Option<usize> = None;
                     let mut idx = 0;
@@ -163,11 +202,11 @@ pub fn run_sup(r#continue: bool, abort: bool, version: bool) -> Result<()> {
                     });
                     if let Some(stash_index) = sup_stash_index {
                         match repo.stash_pop(stash_index, None) {
-                            Ok(_) => info!("sup stash applied during abort"),
+                            Ok(_) => debug!("sup stash applied during abort"),
                             Err(e) => error!("Failed to apply sup stash during abort: {}", e),
                         }
                     } else {
-                        info!("No sup stash found to apply during abort; likely already popped or not created");
+                        warn!("No sup stash found to apply during abort; likely already popped or not created");
                     }
                 }
             }
@@ -176,6 +215,7 @@ pub fn run_sup(r#continue: bool, abort: bool, version: bool) -> Result<()> {
             }
         }
         SupState::clear()?;
+        println!("{}Operation completed successfully", CHECKMARK);
         return Ok(());
     }
     if r#continue {
@@ -185,11 +225,30 @@ pub fn run_sup(r#continue: bool, abort: bool, version: bool) -> Result<()> {
                 original_head,
                 ..
             } => {
-                info!("Continuing interrupted operation");
+                let mut steps_count = 1;
+                let mut steps_total = 1;
+                if original_head.is_some() {
+                    steps_total += 1;
+                }
+                if stash_created {
+                    steps_total += 1;
+                }
+                println!(
+                    "{} {}Continuing interrupted operation",
+                    style(format!("[{}/{}]", steps_count, steps_total)).bold().dim(),
+                    RELOAD
+                );
+                steps_count += 1;
                 // 1. If a merge is in progress, finish it (assume user resolved conflicts and staged files)
                 let mut repo = Repository::open(".").context("Not a git repository")?;
                 if repo.state() == git2::RepositoryState::Merge {
-                    info!("Finishing merge in progress (creating merge commit)");
+                    println!(
+                        "{} {}Finishing merge in progress (creating merge commit)",
+                        style(format!("[{}/{}]", steps_count, steps_total)).bold().dim(),
+                        FLOPPY_DISK
+                    );
+                    steps_count += 1;
+
                     // Try to create a merge commit if index is not conflicted
                     let mut index = repo.index()?;
                     if index.has_conflicts() {
@@ -220,17 +279,25 @@ pub fn run_sup(r#continue: bool, abort: bool, version: bool) -> Result<()> {
                     let msg = "Merge commit (sup --continue)";
                     repo.commit(Some("HEAD"), &sig, &sig, msg, &tree, &parent_refs)?;
                     repo.cleanup_state()?;
-                    info!("Merge commit created and merge state cleaned up");
+                    debug!("Merge commit created and merge state cleaned up");
                 }
                 // 2. Apply stash if it was created
                 if stash_created {
                     // Ensure index is clean before applying stash
-                    repo.reset(&repo.head()?.peel_to_commit()?.as_object(), git2::ResetType::Mixed, None)?;
-                    info!("Applying stashed changes after merge");
+                    repo.reset(
+                        &repo.head()?.peel_to_commit()?.as_object(),
+                        git2::ResetType::Mixed,
+                        None,
+                    )?;
+                    println!(
+                        "{} {}Applying stashed changes",
+                        style(format!("[{}/{}]", steps_count, steps_total)).bold().dim(),
+                        BOX
+                    );
                     // Use stash_apply and only drop if no conflicts
                     match repo.stash_apply(0, None) {
                         Ok(_) => {
-                            info!("Stash applied");
+                            debug!("Stash applied");
                             let mut has_conflicts = false;
                             {
                                 let statuses = repo.statuses(None)?;
@@ -251,7 +318,7 @@ pub fn run_sup(r#continue: bool, abort: bool, version: bool) -> Result<()> {
                                 state.save()?;
                                 anyhow::bail!("Conflicts detected after stash apply");
                             } else {
-                                info!("Dropping stash entry after successful apply");
+                                debug!("Dropping stash entry after successful apply");
                                 repo.stash_drop(0)?;
                             }
                         }
@@ -267,7 +334,7 @@ pub fn run_sup(r#continue: bool, abort: bool, version: bool) -> Result<()> {
                     }
                 }
                 SupState::clear()?;
-                info!("sup --continue completed successfully");
+                println!("{}Operation completed successfully", CHECKMARK);
                 return Ok(());
             }
             _ => {
@@ -282,19 +349,27 @@ pub fn run_sup(r#continue: bool, abort: bool, version: bool) -> Result<()> {
         _ => {}
     }
     let mut repo = Repository::open(".").context("Not a git repository")?;
-    info!("Stashing changes (including untracked)");
+    println!(
+        "{} {}Stashing local changes",
+        style("[1/3]").bold().dim(),
+        FLOPPY_DISK
+    );
     let sig = repo.signature()?;
     let stash_result = repo.stash_save(&sig, "sup stash", Some(StashFlags::INCLUDE_UNTRACKED));
     let stash_created = match stash_result {
         Ok(_) => true,
         Err(ref e) if e.code() == ErrorCode::NotFound => {
-            info!("No changes to stash");
+            debug!("No changes to stash");
             false
         }
         Err(e) => return Err(e.into()),
     };
     let original_head = Some(repo.head()?.target().map(|oid| oid.to_string())).flatten();
-    info!("Pulling latest changes from remote");
+    println!(
+        "{} {}Pulling remote changes",
+        style("[2/3]").bold().dim(),
+        DOWN_ARROW
+    );
     if std::env::var("PULL_WITH_CLI").is_ok() {
         let status = std::process::Command::new("git").arg("pull").status()?;
         if !status.success() {
@@ -350,9 +425,7 @@ pub fn run_sup(r#continue: bool, abort: bool, version: bool) -> Result<()> {
     }
     debug!("Checking out the head with force");
     // checking out the head to ensure that index and working directory are clean
-    repo.checkout_head(Some(
-        git2::build::CheckoutBuilder::default().force(),
-    ))?;
+    repo.checkout_head(Some(git2::build::CheckoutBuilder::default().force()))?;
     state = SupState::InProgress {
         stash_created,
         original_head: original_head.clone(),
@@ -361,8 +434,16 @@ pub fn run_sup(r#continue: bool, abort: bool, version: bool) -> Result<()> {
 
     if stash_created {
         // Ensure index is clean before applying stashed changes
-        repo.reset(&repo.head()?.peel_to_commit()?.as_object(), git2::ResetType::Mixed, None)?;
-        info!("Applying stashed changes");
+        repo.reset(
+            &repo.head()?.peel_to_commit()?.as_object(),
+            git2::ResetType::Mixed,
+            None,
+        )?;
+        println!(
+            "{} {}Applying stashed changes",
+            style("[3/3]").bold().dim(),
+            BOX
+        );
         match repo.stash_apply(0, None) {
             Ok(_) => {
                 debug!("Stash applied, checking for conflicts");
@@ -385,7 +466,7 @@ pub fn run_sup(r#continue: bool, abort: bool, version: bool) -> Result<()> {
                     state.save()?;
                     anyhow::bail!("Conflicts detected after stash apply");
                 } else {
-                    info!("Stash applied successfully with no conflicts");
+                    debug!("Stash applied successfully with no conflicts");
                 }
             }
             Err(e) => {
@@ -398,10 +479,10 @@ pub fn run_sup(r#continue: bool, abort: bool, version: bool) -> Result<()> {
                 anyhow::bail!("Failed to apply stash");
             }
         }
-        info!("Dropping stash entry");
+        debug!("Dropping stash entry");
         repo.stash_drop(0)?;
     }
-    info!("Operation completed successfully");
+    println!("{}Operation completed successfully", CHECKMARK);
     SupState::clear()?;
     // LockGuard will remove the lock file here
     Ok(())
