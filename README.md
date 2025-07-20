@@ -1,4 +1,4 @@
-# `sup`: Trunk Based Deevelopment CLI tool
+# `sup`: Trunk Based Development CLI tool
 
 `sup` does `git stash && git pull && git stash pop` with recovery (`--abort` and `--continue`)
 
