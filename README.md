@@ -11,6 +11,7 @@
 - ⚔️ **Conflict handling**: If a conflict occurs, you can resolve it and use `sup --continue` to finish the operation.
 - 🛑 **Abort support**: If you want to roll back, use `sup --abort` to restore your previous state and stashed changes.
 - 📝 **State tracking**: Remembers interrupted operations and prevents accidental data loss.
+- 🚀 **Commit and push**: Provide commit message with `--message/-m` flag to commit and push stashed changes, including hook support.
 
 ## Usage
 
