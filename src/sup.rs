@@ -1,11 +1,9 @@
 use anyhow::{Context, Result};
-use tempfile;
 use std::io::Write;
 use crate::hooks;
 use console::{style, Emoji};
 use git2::{ErrorCode, Repository, StashFlags};
 use serde::{Deserialize, Serialize};
-use serde_json;
 use std::fs::OpenOptions;
 use std::fs::{self, File};
 use std::io::Read;
@@ -147,7 +145,7 @@ pub fn run_sup(
     struct LockGuard<'a> {
         path: &'a Path,
     }
-    impl<'a> Drop for LockGuard<'a> {
+    impl Drop for LockGuard<'_> {
         fn drop(&mut self) {
             let _ = std::fs::remove_file(self.path);
         }
@@ -316,7 +314,7 @@ pub fn run_sup(
                 if stash_created {
                     // Ensure index is clean before applying stash
                     repo.reset(
-                        &repo.head()?.peel_to_commit()?.as_object(),
+                        repo.head()?.peel_to_commit()?.as_object(),
                         git2::ResetType::Mixed,
                         None,
                     )?;
@@ -411,8 +409,6 @@ pub fn run_sup(
                                                 } else {
                                                     Err(git2::Error::from_str("No username for SSH key auth"))
                                                 }
-                                            } else if allowed_types.is_user_pass_plaintext() {
-                                                git2::Cred::default()
                                             } else {
                                                 git2::Cred::default()
                                             }
@@ -451,11 +447,8 @@ pub fn run_sup(
             }
         }
     }
-    match state {
-        SupState::InProgress { .. } => {
-            anyhow::bail!("Operation already in progress. To roll back, run with --abort. To continue, run with --continue.");
-        }
-        _ => {}
+    if let SupState::InProgress { .. } = state {
+        anyhow::bail!("Operation already in progress. To roll back, run with --abort. To continue, run with --continue.");
     }
     let total_steps = if message.is_some() { 5 } else { 3 };
     let mut steps_count = 1;
@@ -557,7 +550,7 @@ pub fn run_sup(
     if stash_created {
         // Ensure index is clean before applying stashed changes
         repo.reset(
-            &repo.head()?.peel_to_commit()?.as_object(),
+            repo.head()?.peel_to_commit()?.as_object(),
             git2::ResetType::Mixed,
             None,
         )?;
@@ -641,8 +634,6 @@ pub fn run_sup(
                                     } else {
                                         Err(git2::Error::from_str("No username for SSH key auth"))
                                     }
-                                } else if allowed_types.is_user_pass_plaintext() {
-                                    git2::Cred::default()
                                 } else {
                                     git2::Cred::default()
                                 }

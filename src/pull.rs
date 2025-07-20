@@ -92,7 +92,7 @@ fn do_fetch<'a>(
 
     // After fetch, return the AnnotatedCommit for the remote-tracking branch
     let fetch_ref = repo.find_reference(remote_tracking_ref)?;
-    Ok(repo.reference_to_annotated_commit(&fetch_ref)?)
+    repo.reference_to_annotated_commit(&fetch_ref)
 }
 
 fn fast_forward(
@@ -218,7 +218,7 @@ fn do_merge<'a>(
         tracing::debug!("Doing a normal merge");
         // do a normal merge
         let head_commit = repo.reference_to_annotated_commit(&repo.head()?)?;
-        normal_merge(&repo, &head_commit, &fetch_commit)?;
+        normal_merge(repo, &head_commit, &fetch_commit)?;
     } else {
         tracing::debug!("Nothing to merge, continue");
     }
@@ -239,5 +239,5 @@ pub(crate) fn pull_run(args: &Args) -> Result<(), git2::Error> {
     );
     let remote_refname = format!("refs/remotes/{}/{}", remote_name, remote_branch);
     let fetch_commit = do_fetch(&repo, &[&refspec], &mut remote, &remote_refname)?;
-    do_merge(&repo, &remote_branch, fetch_commit)
+    do_merge(&repo, remote_branch, fetch_commit)
 }

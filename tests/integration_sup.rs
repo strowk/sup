@@ -66,7 +66,7 @@ fn run_sup(dir: &Path, extra_args: &[&str], expect_failure: bool) {
     let git_status = Command::new("git")
         .arg("status")
         .arg("-v")
-        .current_dir(&dir)
+        .current_dir(dir)
         .output()
         .expect("failed to run git status");
     println!(
@@ -87,7 +87,7 @@ fn run_sup(dir: &Path, extra_args: &[&str], expect_failure: bool) {
         .arg("--graph")
         .arg("--oneline")
         .arg("--all")
-        .current_dir(&dir)
+        .current_dir(dir)
         .output()
         .expect("failed to run git log");
     println!(
@@ -100,7 +100,6 @@ fn run_sup(dir: &Path, extra_args: &[&str], expect_failure: bool) {
             !status.success(),
             "sup should have failed, but it succeeded"
         );
-        return;
     } else {
         assert!(status.success(), "sup failed");
     }
@@ -438,11 +437,11 @@ fn test_continue_applies_stash_after_conflict_resolution_then_commit_is_pushed()
     let repo1 = temp.path().join("repo1_bare");
     let repo2 = temp.path().join("repo2");
     // Create bare repo1
-    run_git(&temp.path(), &["init", "--bare", "repo1_bare"]);
+    run_git(temp.path(), &["init", "--bare", "repo1_bare"]);
 
     // Clone repo1 to repo2 (creates working directory)
     let repo1_url = file_url(&repo1);
-    run_git(&temp.path(), &["clone", &repo1_url, "repo2"]);
+    run_git(temp.path(), &["clone", &repo1_url, "repo2"]);
     run_git(&repo2, &["config", "user.email", "test@example.com"]);
     run_git(&repo2, &["config", "user.name", "Test"]);
 
@@ -454,7 +453,7 @@ fn test_continue_applies_stash_after_conflict_resolution_then_commit_is_pushed()
 
     // Simulate remote change: clone repo1 to temp remote_work, commit, push
     let remote_work = temp.path().join("remote_work");
-    run_git(&temp.path(), &["clone", &repo1_url, "remote_work"]);
+    run_git(temp.path(), &["clone", &repo1_url, "remote_work"]);
     run_git(&remote_work, &["config", "user.email", "test@example.com"]);
     run_git(&remote_work, &["config", "user.name", "Test"]);
     fs::write(remote_work.join("file.txt"), "updated\n").unwrap();
@@ -499,7 +498,7 @@ fn test_continue_applies_stash_after_conflict_resolution_then_commit_is_pushed()
 
     // Clone remote to a third repo to verify push
     let verify_repo = temp.path().join("verify");
-    run_git(&temp.path(), &["clone", &repo1_url, "verify"]);
+    run_git(temp.path(), &["clone", &repo1_url, "verify"]);
     let content = fs::read_to_string(verify_repo.join("file.txt")).unwrap();
     assert_eq!(content, "resolved\n");
     let content = fs::read_to_string(verify_repo.join("file2.txt")).unwrap();
@@ -512,11 +511,11 @@ fn test_stash_and_pop_uncommitted_change_then_commit_with_hook_and_fail_on_exit_
     let repo1 = temp.path().join("repo1_bare");
     let repo2 = temp.path().join("repo2");
     // Create bare repo1
-    run_git(&temp.path(), &["init", "--bare", "repo1_bare"]);
+    run_git(temp.path(), &["init", "--bare", "repo1_bare"]);
 
     // Clone repo1 to repo2 (creates working directory)
     let repo1_url = file_url(&repo1);
-    run_git(&temp.path(), &["clone", &repo1_url, "repo2"]);
+    run_git(temp.path(), &["clone", &repo1_url, "repo2"]);
     run_git(&repo2, &["config", "user.email", "test@example.com"]);
     run_git(&repo2, &["config", "user.name", "Test"]);
 
@@ -528,7 +527,7 @@ fn test_stash_and_pop_uncommitted_change_then_commit_with_hook_and_fail_on_exit_
 
     // Simulate remote change: clone repo1 to temp remote_work, commit, push
     let remote_work = temp.path().join("remote_work");
-    run_git(&temp.path(), &["clone", &repo1_url, "remote_work"]);
+    run_git(temp.path(), &["clone", &repo1_url, "remote_work"]);
     run_git(&remote_work, &["config", "user.email", "test@example.com"]);
     run_git(&remote_work, &["config", "user.name", "Test"]);
     fs::write(remote_work.join("file.txt"), "updated\n").unwrap();
@@ -547,9 +546,9 @@ fn test_stash_and_pop_uncommitted_change_then_commit_with_hook_and_fail_on_exit_
     #[cfg(not(windows))]
     let hook_path = hooks_dir.join("pre-commit");
     #[cfg(windows)]
-    fs::write(&hook_path, format!(r#"
+    fs::write(&hook_path, r#"
 exit 1
-"#).as_bytes()).unwrap();
+"#.to_string().as_bytes()).unwrap();
     #[cfg(not(windows))]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -570,11 +569,11 @@ fn test_stash_and_pop_uncommitted_change_then_commit_with_pre_push_hook_and_fail
     let repo1 = temp.path().join("repo1_bare");
     let repo2 = temp.path().join("repo2");
     // Create bare repo1
-    run_git(&temp.path(), &["init", "--bare", "repo1_bare"]);
+    run_git(temp.path(), &["init", "--bare", "repo1_bare"]);
 
     // Clone repo1 to repo2 (creates working directory)
     let repo1_url = file_url(&repo1);
-    run_git(&temp.path(), &["clone", &repo1_url, "repo2"]);
+    run_git(temp.path(), &["clone", &repo1_url, "repo2"]);
     run_git(&repo2, &["config", "user.email", "test@example.com"]);
     run_git(&repo2, &["config", "user.name", "Test"]);
 
@@ -586,7 +585,7 @@ fn test_stash_and_pop_uncommitted_change_then_commit_with_pre_push_hook_and_fail
 
     // Simulate remote change: clone repo1 to temp remote_work, commit, push
     let remote_work = temp.path().join("remote_work");
-    run_git(&temp.path(), &["clone", &repo1_url, "remote_work"]);
+    run_git(temp.path(), &["clone", &repo1_url, "remote_work"]);
     run_git(&remote_work, &["config", "user.email", "test@example.com"]);
     run_git(&remote_work, &["config", "user.name", "Test"]);
     fs::write(remote_work.join("file.txt"), "updated\n").unwrap();
@@ -625,11 +624,11 @@ fn test_stash_and_pop_uncommitted_nonconflicting_changes_then_commit_with_hook_i
     let repo1 = temp.path().join("repo1_bare");
     let repo2 = temp.path().join("repo2");
     // Create bare repo1
-    run_git(&temp.path(), &["init", "--bare", "repo1_bare"]);
+    run_git(temp.path(), &["init", "--bare", "repo1_bare"]);
 
     // Clone repo1 to repo2 (creates working directory)
     let repo1_url = file_url(&repo1);
-    run_git(&temp.path(), &["clone", &repo1_url, "repo2"]);
+    run_git(temp.path(), &["clone", &repo1_url, "repo2"]);
     run_git(&repo2, &["config", "user.email", "test@example.com"]);
     run_git(&repo2, &["config", "user.name", "Test"]);
 
@@ -641,7 +640,7 @@ fn test_stash_and_pop_uncommitted_nonconflicting_changes_then_commit_with_hook_i
 
     // Simulate remote change: clone repo1 to temp remote_work, commit, push
     let remote_work = temp.path().join("remote_work");
-    run_git(&temp.path(), &["clone", &repo1_url, "remote_work"]);
+    run_git(temp.path(), &["clone", &repo1_url, "remote_work"]);
     run_git(&remote_work, &["config", "user.email", "test@example.com"]);
     run_git(&remote_work, &["config", "user.name", "Test"]);
     fs::write(remote_work.join("file.txt"), "updated\n").unwrap();
@@ -661,9 +660,9 @@ fn test_stash_and_pop_uncommitted_nonconflicting_changes_then_commit_with_hook_i
     #[cfg(not(windows))]
     let hook_path = hooks_dir.join("pre-commit");
     #[cfg(windows)]
-    fs::write(&hook_path, format!(r#"
+    fs::write(&hook_path, r#"
 exit 1
-"#).as_bytes()).unwrap();
+"#.to_string().as_bytes()).unwrap();
     #[cfg(not(windows))]
     {
         use std::os::unix::fs::PermissionsExt;
