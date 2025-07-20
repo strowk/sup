@@ -45,8 +45,11 @@ pub fn run_hook(repo: &git2::Repository, hook_name: &str, args: &[&str]) -> Resu
         cmd.args(args);
         // Set environment variables as git does
         // TODO: Add more env vars if needed
+
+        // Inherit stdout/stderr to see hook output
         cmd.stdout(Stdio::inherit());
         cmd.stderr(Stdio::inherit());
+        
         let status_result = cmd.status();
         match status_result {
             Ok(status) => {
