@@ -131,7 +131,7 @@ fn normal_merge(
     let mut idx = repo.merge_trees(&ancestor, &local_tree, &remote_tree, None)?;
 
     if idx.has_conflicts() {
-        tracing::warn!("Merge conflicts detected...");
+        tracing::debug!("Merge conflicts detected...");
         repo.checkout_index(Some(&mut idx), None)?;
         // Set up merge state files so that the next git commit will be a merge commit
         use std::fs::File;

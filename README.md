@@ -19,6 +19,8 @@
 sup                # Stash, pull, and restore changes
 sup --continue     # Continue after resolving a conflict
 sup --abort        # Abort and restore previous state
+sup --message "Your commit message"  # Stash, pull, restore, and commit with a message
+sup -m "Your commit message"  # Short form for --message
 ```
 
 ### Typical Workflow
