@@ -1,14 +1,14 @@
-use anyhow::{Context, Result};
-use std::io::Write;
 use crate::hooks;
+use anyhow::{Context, Result};
 use console::{style, Emoji};
 use git2::{ErrorCode, Repository, StashFlags};
 use serde::{Deserialize, Serialize};
 use std::fs::OpenOptions;
 use std::fs::{self, File};
 use std::io::Read;
+use std::io::Write;
 use std::path::Path;
-use std::process;
+use std::{any, process};
 use tracing::{debug, error, warn};
 
 const STATE_FILE: &str = ".git/sup_state";
@@ -398,28 +398,7 @@ pub fn run_sup(
                                             branch
                                         );
                                         // Run pre-push hook if present
-                                        hooks::run_hook(&repo, "pre-push", &["origin"])?;
-                                        let mut remote = repo.find_remote("origin")?;
-                                        let refspec = format!("refs/heads/{}:refs/heads/{}", branch, branch);
-                                        let mut callbacks = git2::RemoteCallbacks::new();
-                                        callbacks.credentials(|_url, username_from_url, allowed_types| {
-                                            if allowed_types.is_ssh_key() {
-                                                if let Some(username) = username_from_url {
-                                                    git2::Cred::ssh_key_from_agent(username)
-                                                } else {
-                                                    Err(git2::Error::from_str("No username for SSH key auth"))
-                                                }
-                                            } else {
-                                                git2::Cred::default()
-                                            }
-                                        });
-                                        let mut push_options = git2::PushOptions::new();
-                                        push_options.remote_callbacks(callbacks);
-                                        remote.push(&[&refspec], Some(&mut push_options))
-                                            .map_err(|e| {
-                                                error!("libgit2 push failed: {}", e);
-                                                anyhow::anyhow!("libgit2 push failed: {}", e)
-                                            })?;
+                                        push(&repo, &branch)?;
                                     }
                                 }
                                 debug!("Dropping stash entry after successful apply");
@@ -595,7 +574,7 @@ pub fn run_sup(
                             CHECKMARK
                         );
                         steps_count += 1;
-                         // Run pre-commit hook if present
+                        // Run pre-commit hook if present
                         hooks::run_hook(&repo, "pre-commit", &[])?;
                         // Prepare commit message file for commit-msg hook
                         let mut commit_msg_file = tempfile::NamedTempFile::new()?;
@@ -622,29 +601,8 @@ pub fn run_sup(
                                 ROCKET,
                                 branch
                             );
-                            // Run pre-push hook if present
-                            hooks::run_hook(&repo, "pre-push", &["origin"])?;
-                            let mut remote = repo.find_remote("origin")?;
-                            let refspec = format!("refs/heads/{}:refs/heads/{}", branch, branch);
-                            let mut callbacks = git2::RemoteCallbacks::new();
-                            callbacks.credentials(|_url, username_from_url, allowed_types| {
-                                if allowed_types.is_ssh_key() {
-                                    if let Some(username) = username_from_url {
-                                        git2::Cred::ssh_key_from_agent(username)
-                                    } else {
-                                        Err(git2::Error::from_str("No username for SSH key auth"))
-                                    }
-                                } else {
-                                    git2::Cred::default()
-                                }
-                            });
-                            let mut push_options = git2::PushOptions::new();
-                            push_options.remote_callbacks(callbacks);
-                            remote.push(&[&refspec], Some(&mut push_options))
-                                .map_err(|e| {
-                                    error!("libgit2 push failed: {}", e);
-                                    anyhow::anyhow!("libgit2 push failed: {}", e)
-                                })?;
+                            
+                            push(&repo, &branch)?;
                         }
                     }
                 }
@@ -666,5 +624,42 @@ pub fn run_sup(
     println!("{}Operation completed successfully", CHECKMARK);
     SupState::clear()?;
     // LockGuard will remove the lock file here
+    Ok(())
+}
+
+fn push(repo: &Repository, branch: &str) -> anyhow::Result<()> {
+    // Run pre-push hook if present
+    hooks::run_hook(repo, "pre-push", &["origin"])?;
+    let mut remote = repo.find_remote("origin")?;
+    let refspec = format!("refs/heads/{}:refs/heads/{}", branch, branch);
+    let mut callbacks = git2::RemoteCallbacks::new();
+    callbacks.credentials(|url, username_from_url, allowed_types| {
+        if allowed_types.is_ssh_key() {
+            if let Some(username) = username_from_url {
+                return git2::Cred::ssh_key_from_agent(username);
+            } else {
+                return Err(git2::Error::from_str("No username for SSH key auth"));
+            }
+        }
+        // Try credential helpers for HTTPS/HTTP
+        if allowed_types.is_user_pass_plaintext() {
+            if let Ok(config) = repo.config() {
+                if let Ok(cred) = git2::Cred::credential_helper(&config, url, username_from_url) {
+                    return Ok(cred);
+                }
+            }
+        }
+        // Fallback to default
+        git2::Cred::default()
+    });
+    let mut push_options = git2::PushOptions::new();
+    push_options.remote_callbacks(callbacks);
+    remote
+        .push(&[&refspec], Some(&mut push_options))
+        .map_err(|e| {
+            error!("libgit2 push failed: {}", e);
+            anyhow::anyhow!("libgit2 push failed: {}", e)
+        })?;
+
     Ok(())
 }
