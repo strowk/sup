@@ -41,15 +41,36 @@ pub fn run_hook(repo: &git2::Repository, hook_name: &str, args: &[&str]) -> Resu
     if let Some(hook) = hook {
         debug!("Running hook: {}", hook.display());
         use std::process::Stdio;
-        let mut cmd = Command::new(hook.clone());
-        cmd.args(args);
+        #[cfg(windows)]
+        let mut cmd = {
+            let ext = hook.extension().and_then(|e| e.to_str()).unwrap_or("");
+            if ext.is_empty() {
+                // No extension: treat as shell script, run with bash.exe if available
+                // Try to find bash.exe in PATH (Git Bash)
+                let bash = std::env::var("COMSPEC").ok().and_then(|_| which::which("bash.exe").ok());
+                let bash_path = bash.unwrap_or_else(|| std::path::PathBuf::from("bash.exe"));
+                let mut c = Command::new(bash_path);
+                c.arg(hook);
+                c.args(args);
+                c
+            } else {
+                let mut c = Command::new(hook);
+                c.args(args);
+                c
+            }
+        };
+        #[cfg(not(windows))]
+        let mut cmd = {
+            let mut c = Command::new(hook);
+            c.args(args);
+            c
+        };
         // Set environment variables as git does
         // TODO: Add more env vars if needed
 
-        // Inherit stdout/stderr to see hook output
+        // inherit stdout and stderr
         cmd.stdout(Stdio::inherit());
         cmd.stderr(Stdio::inherit());
-        
         let status_result = cmd.status();
         match status_result {
             Ok(status) => {
