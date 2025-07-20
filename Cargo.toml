@@ -42,3 +42,4 @@ git2 = "0.20.2"
 [package.metadata.deb]
 maintainer = "strowk <25692644+strowk@users.noreply.github.com>"
 section = "utils"
+name = "git-sup"
