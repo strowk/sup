@@ -21,6 +21,10 @@ pub struct Cli {
     /// show version
     #[argh(switch, short = 'v')]
     pub version: bool,
+
+    /// commit message for auto-commit after applying stash
+    #[argh(option, short = 'm')]
+    pub message: Option<String>,
 }
 
 impl Cli {

@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - Updated logging messages to use `debug!` instead of `info!` in several places to reduce output verbosity.
 - Fancier output.
 
+### Added
+
+- Added support for `--message/-m` flag to commit stashed changes with a custom message.
+
 ## [0.0.4] - 2025-07-19
 
 ### Fixed
