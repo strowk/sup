@@ -15,7 +15,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Added
 
-- Added support for `--message/-m` flag to commit stashed changes with a custom message.
+- Added support for `--message/-m` flag to commit and push stashed changes with a custom message.
+
+### Fixed
+
+- Bug when after pulling changes, merge state was not created.
 
 ## [0.0.4] - 2025-07-19
 

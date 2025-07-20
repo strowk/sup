@@ -133,6 +133,26 @@ fn normal_merge(
     if idx.has_conflicts() {
         tracing::warn!("Merge conflicts detected...");
         repo.checkout_index(Some(&mut idx), None)?;
+        // Set up merge state files so that the next git commit will be a merge commit
+        use std::fs::File;
+        use std::io::Write;
+        // .git/MERGE_HEAD: remote commit id
+        let git_dir = repo.path();
+        let merge_head_path = git_dir.join("MERGE_HEAD");
+        let mut merge_head = File::create(&merge_head_path)
+            .map_err(|e| git2::Error::from_str(&format!("Failed to create MERGE_HEAD: {e}")))?;
+        writeln!(merge_head, "{}", remote.id())
+            .map_err(|e| git2::Error::from_str(&format!("Failed to write MERGE_HEAD: {e}")))?;
+        // .git/MERGE_MSG: default merge message
+        let merge_msg_path = git_dir.join("MERGE_MSG");
+        let mut merge_msg = File::create(&merge_msg_path)
+            .map_err(|e| git2::Error::from_str(&format!("Failed to create MERGE_MSG: {e}")))?;
+        writeln!(merge_msg, "Merge: {} into {}", remote.id(), local.id())
+            .map_err(|e| git2::Error::from_str(&format!("Failed to write MERGE_MSG: {e}")))?;
+        // .git/MERGE_MODE: empty file (default)
+        let merge_mode_path = git_dir.join("MERGE_MODE");
+        File::create(&merge_mode_path)
+            .map_err(|e| git2::Error::from_str(&format!("Failed to create MERGE_MODE: {e}")))?;
         return Err(git2::Error::from_str(
             "Merge conflicts detected, please resolve them manually.",
         ));

@@ -15,6 +15,7 @@ const LOCK_FILE: &str = ".git/sup.lock";
 
 static FLOPPY_DISK: Emoji<'_, '_> = Emoji("🗃️  ", "");
 static DOWN_ARROW: Emoji<'_, '_> = Emoji("⬇️  ", "");
+static ROCKET: Emoji<'_, '_> = Emoji("🚀 ", "");
 static CHECKMARK: Emoji<'_, '_> = Emoji("✅  ", "");
 static BOX: Emoji<'_, '_> = Emoji("📦  ", "");
 static RELOAD: Emoji<'_, '_> = Emoji("🔄  ", "");
@@ -253,7 +254,7 @@ pub fn run_sup(
                 if stash_created {
                     steps_total += 1;
                     if message.is_some() {
-                        steps_total += 1;
+                        steps_total += 2; // commit and push
                     }
                 }
                 println!(
@@ -357,6 +358,7 @@ pub fn run_sup(
                                             .dim(),
                                         FLOPPY_DISK
                                     );
+                                    steps_count += 1;
                                     let mut index = repo.index()?;
                                     index.add_all(
                                         ["*"].iter(),
@@ -376,6 +378,41 @@ pub fn run_sup(
                                         &tree,
                                         &[&parent_commit],
                                     )?;
+                                    // Push the current branch using libgit2
+                                    let head = repo.head()?;
+                                    if let Some(branch) = head.shorthand() {
+                                        println!(
+                                            "{} {}Pushing branch '{}'",
+                                            style(format!("[{}/{}]", steps_count, steps_total))
+                                                .bold()
+                                                .dim(),
+                                            ROCKET,
+                                            branch
+                                        );
+                                        let mut remote = repo.find_remote("origin")?;
+                                        let refspec = format!("refs/heads/{}:refs/heads/{}", branch, branch);
+                                        let mut callbacks = git2::RemoteCallbacks::new();
+                                        callbacks.credentials(|_url, username_from_url, allowed_types| {
+                                            if allowed_types.is_ssh_key() {
+                                                if let Some(username) = username_from_url {
+                                                    git2::Cred::ssh_key_from_agent(username)
+                                                } else {
+                                                    Err(git2::Error::from_str("No username for SSH key auth"))
+                                                }
+                                            } else if allowed_types.is_user_pass_plaintext() {
+                                                git2::Cred::default()
+                                            } else {
+                                                git2::Cred::default()
+                                            }
+                                        });
+                                        let mut push_options = git2::PushOptions::new();
+                                        push_options.remote_callbacks(callbacks);
+                                        remote.push(&[&refspec], Some(&mut push_options))
+                                            .map_err(|e| {
+                                                error!("libgit2 push failed: {}", e);
+                                                anyhow::anyhow!("libgit2 push failed: {}", e)
+                                            })?;
+                                    }
                                 }
                                 debug!("Dropping stash entry after successful apply");
                                 repo.stash_drop(0)?;
@@ -408,13 +445,15 @@ pub fn run_sup(
         }
         _ => {}
     }
-    let total_steps = if message.is_some() { 4 } else { 3 };
+    let total_steps = if message.is_some() { 5 } else { 3 };
     let mut steps_count = 1;
 
     let mut repo = Repository::open(".").context("Not a git repository")?;
     println!(
         "{} {}Stashing local changes",
-        style(format!("[{}/{}]", steps_count, total_steps)).bold().dim(),
+        style(format!("[{}/{}]", steps_count, total_steps))
+            .bold()
+            .dim(),
         FLOPPY_DISK
     );
     steps_count += 1;
@@ -432,7 +471,9 @@ pub fn run_sup(
     let original_head = Some(repo.head()?.target().map(|oid| oid.to_string())).flatten();
     println!(
         "{} {}Pulling remote changes",
-        style(format!("[{}/{}]", steps_count, total_steps)).bold().dim(),
+        style(format!("[{}/{}]", steps_count, total_steps))
+            .bold()
+            .dim(),
         DOWN_ARROW
     );
     steps_count += 1;
@@ -510,7 +551,9 @@ pub fn run_sup(
         )?;
         println!(
             "{} {}Applying stashed changes",
-            style(format!("[{}/{}]", steps_count, total_steps)).bold().dim(),
+            style(format!("[{}/{}]", steps_count, total_steps))
+                .bold()
+                .dim(),
             BOX
         );
         match repo.stash_apply(0, None) {
@@ -541,9 +584,12 @@ pub fn run_sup(
                     if let Some(ref msg) = message {
                         println!(
                             "{} {}Committing stashed changes",
-                            style(format!("[{}/{}]", steps_count, total_steps)).bold().dim(),
+                            style(format!("[{}/{}]", steps_count, total_steps))
+                                .bold()
+                                .dim(),
                             CHECKMARK
                         );
+                        steps_count += 1;
                         let mut index = repo.index()?;
                         index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None)?;
                         index.write()?;
@@ -552,6 +598,41 @@ pub fn run_sup(
                         let sig = repo.signature()?;
                         let parent_commit = repo.head()?.peel_to_commit()?;
                         repo.commit(Some("HEAD"), &sig, &sig, msg, &tree, &[&parent_commit])?;
+                        // Push the current branch using libgit2
+                        let head = repo.head()?;
+                        if let Some(branch) = head.shorthand() {
+                            println!(
+                                "{} {}Pushing branch '{}'",
+                                style(format!("[{}/{}]", steps_count, total_steps))
+                                    .bold()
+                                    .dim(),
+                                ROCKET,
+                                branch
+                            );
+                            let mut remote = repo.find_remote("origin")?;
+                            let refspec = format!("refs/heads/{}:refs/heads/{}", branch, branch);
+                            let mut callbacks = git2::RemoteCallbacks::new();
+                            callbacks.credentials(|_url, username_from_url, allowed_types| {
+                                if allowed_types.is_ssh_key() {
+                                    if let Some(username) = username_from_url {
+                                        git2::Cred::ssh_key_from_agent(username)
+                                    } else {
+                                        Err(git2::Error::from_str("No username for SSH key auth"))
+                                    }
+                                } else if allowed_types.is_user_pass_plaintext() {
+                                    git2::Cred::default()
+                                } else {
+                                    git2::Cred::default()
+                                }
+                            });
+                            let mut push_options = git2::PushOptions::new();
+                            push_options.remote_callbacks(callbacks);
+                            remote.push(&[&refspec], Some(&mut push_options))
+                                .map_err(|e| {
+                                    error!("libgit2 push failed: {}", e);
+                                    anyhow::anyhow!("libgit2 push failed: {}", e)
+                                })?;
+                        }
                     }
                 }
             }
