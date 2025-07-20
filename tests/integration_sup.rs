@@ -546,9 +546,15 @@ fn test_stash_and_pop_uncommitted_change_then_commit_with_hook_and_fail_on_exit_
     #[cfg(not(windows))]
     let hook_path = hooks_dir.join("pre-commit");
     #[cfg(windows)]
-    fs::write(&hook_path, r#"
+    fs::write(
+        &hook_path,
+        r#"
 exit 1
-"#.to_string().as_bytes()).unwrap();
+"#
+        .to_string()
+        .as_bytes(),
+    )
+    .unwrap();
     #[cfg(not(windows))]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -560,7 +566,6 @@ exit 1
 
     // run sup in repo2
     run_sup(&repo2, &["-m", "commit message"], true);
-
 }
 
 #[test]
@@ -620,7 +625,7 @@ fn test_stash_and_pop_uncommitted_change_then_commit_with_pre_push_hook_and_fail
 
 #[test]
 fn test_stash_and_pop_uncommitted_nonconflicting_changes_then_commit_with_hook_in_different_dir() {
-     let temp = tempfile::tempdir().unwrap();
+    let temp = tempfile::tempdir().unwrap();
     let repo1 = temp.path().join("repo1_bare");
     let repo2 = temp.path().join("repo2");
     // Create bare repo1
@@ -660,9 +665,15 @@ fn test_stash_and_pop_uncommitted_nonconflicting_changes_then_commit_with_hook_i
     #[cfg(not(windows))]
     let hook_path = hooks_dir.join("pre-commit");
     #[cfg(windows)]
-    fs::write(&hook_path, r#"
+    fs::write(
+        &hook_path,
+        r#"
 exit 1
-"#.to_string().as_bytes()).unwrap();
+"#
+        .to_string()
+        .as_bytes(),
+    )
+    .unwrap();
     #[cfg(not(windows))]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -677,5 +688,63 @@ exit 1
 
     // check repo2 file has local change (should be popped back)
     let content = file_content(&repo2.join("file2.txt"));
+    assert_eq!(content, "localnewfile\n");
+}
+
+#[test]
+fn test_commit_and_push_after_automatic_normal_merge() {
+    let temp = tempfile::tempdir().unwrap();
+    let repo1 = temp.path().join("repo1_bare");
+    let repo2 = temp.path().join("repo2");
+    // Create bare repo1
+    run_git(temp.path(), &["init", "--bare", "repo1_bare"]);
+
+    // Clone repo1 to repo2 (creates working directory)
+    let repo1_url = file_url(&repo1);
+    run_git(temp.path(), &["clone", &repo1_url, "repo2"]);
+    run_git(&repo2, &["config", "user.email", "test@example.com"]);
+    run_git(&repo2, &["config", "user.name", "Test"]);
+
+    // Initial commit in repo2, then push to bare repo1
+    fs::write(repo2.join("file.txt"), "line0\ninitial-line1\nline2\nline3\nline4\nline5\n").unwrap();
+    run_git(&repo2, &["add", "."]);
+    run_git(&repo2, &["commit", "-m", "initial"]);
+    run_git(&repo2, &["push", "origin", "master"]);
+
+    // Simulate remote change: clone repo1 to temp remote_work, commit, push
+    let remote_work = temp.path().join("remote_work");
+    run_git(temp.path(), &["clone", &repo1_url, "remote_work"]);
+    run_git(&remote_work, &["config", "user.email", "test@example.com"]);
+    run_git(&remote_work, &["config", "user.name", "Test"]);
+    fs::write(remote_work.join("file.txt"), "line0\nupdated-line1\nline2\nline3\nline4\nline5\n").unwrap();
+    run_git(&remote_work, &["add", "."]);
+    run_git(&remote_work, &["commit", "-m", "update"]);
+    run_git(&remote_work, &["push", "origin", "master"]);
+
+    // In repo2: make committed non-conflicting change that requires a normal merge
+    fs::write(repo2.join("file.txt"), "line0\ninitial-line1\nline2\nline3\nline4-changed\nline5\n").unwrap();
+    run_git(&repo2, &["add", "."]);
+    run_git(&repo2, &["commit", "-m", "local change"]);
+
+    // make uncommitted non-conflicting change in repo2
+    fs::write(repo2.join("file2.txt"), "localnewfile\n").unwrap();
+
+    // run sup in repo2 (should succeed and push changes)
+    run_sup(&repo2, &["-m", "commit message"], false);
+
+    // check that file2.txt (popped from stash) is present and correct
+    let content = file_content(&repo2.join("file2.txt"));
+    assert_eq!(content, "localnewfile\n");
+
+    // check that file.txt has merged content
+    let content = file_content(&repo2.join("file.txt"));
+    assert_eq!(content, "line0\nupdated-line1\nline2\nline3\nline4-changed\nline5\n");
+
+    // verify that the commit was pushed to the remote
+    let verify_repo = temp.path().join("verify");
+    run_git(temp.path(), &["clone", &repo1_url, "verify"]);
+    let content = fs::read_to_string(verify_repo.join("file.txt")).unwrap();
+    assert_eq!(content, "line0\nupdated-line1\nline2\nline3\nline4-changed\nline5\n");
+    let content = fs::read_to_string(verify_repo.join("file2.txt")).unwrap();
     assert_eq!(content, "localnewfile\n");
 }
