@@ -43,3 +43,8 @@ git2 = "0.20.2"
 maintainer = "strowk <25692644+strowk@users.noreply.github.com>"
 section = "utils"
 name = "git-sup"
+assets = [
+    "$auto",
+    # this is an alias to integrate into git
+    ["target/release/git-sup", "usr/bin/", "755"],
+] 

@@ -25,6 +25,8 @@ ARG VERSION=SNAPSHOT
 COPY Cargo.toml Cargo.lock /app/
 COPY src /app/src
 COPY target/x86_64-unknown-linux-gnu/ /app/target/x86_64-unknown-linux-gnu/
+RUN cd /app/target/x86_64-unknown-linux-gnu/release && \
+    ln -sf sup git-sup
 WORKDIR /app
 RUN cargo deb --no-build --target=x86_64-unknown-linux-gnu
 RUN dpkg -i target/x86_64-unknown-linux-gnu/debian/git-sup_${VERSION}-1_amd64.deb
