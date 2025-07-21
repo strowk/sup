@@ -1,4 +1,4 @@
-Package: sup
+Package: git-sup
 Version: 0.1.2-1
 Architecture: amd64
 Maintainer: strowk <25692644+strowk@users.noreply.github.com>
@@ -6,11 +6,11 @@ Installed-Size: 8093
 Depends: libc6 (>= 2.34)
 Priority: optional
 Section: utils
-Filename: pool/main/s/sup/sup_0.1.2-1_amd64.deb
-Size: 2555564
-SHA256: 025c24bad89c4f78f70f914fe41cfa27faabbafef92169bba446f512e3ef7b5a
-SHA1: 9101e3687f4fcdd57faccf5c7873d1df30b9a795
-MD5sum: f66d7b15bd5468586bd6cfa3510abfc0
+Filename: pool/main/g/git-sup/git-sup_0.1.2-1_amd64.deb
+Size: 2556536
+SHA256: fa54df2d7b4bf4b6dfc7bc462bb5afeb65ae15fc74b3d9eb7dced13d2f7b09f3
+SHA1: ecb81ae6a1de4f1b261bccd2c12143245a2b0060
+MD5sum: 8685dfebe69c2103d8ccec5bab7f4a67
 Description: A tool for Trunk-Based Development to safely and quickly push code to git
  repository.
 
