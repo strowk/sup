@@ -62,6 +62,15 @@ fn do_fetch<'a>(
         true
     });
 
+    cb.credentials(|url, username_from_url, allowed_types| {
+        crate::credentials::callback(
+            url,
+            username_from_url,
+            &allowed_types,
+            repo,
+        )
+    });
+
     let mut fo = git2::FetchOptions::new();
     fo.remote_callbacks(cb);
     // Always fetch all tags.

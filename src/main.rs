@@ -2,6 +2,7 @@ mod cli;
 mod sup;
 mod pull;
 mod hooks;
+mod credentials;
 
 fn main() {
     let cli = cli::Cli::parse();

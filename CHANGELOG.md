@@ -8,7 +8,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
-WIP
+### Fixed
+
+- Corrected a bug when pulling changes was not possible from private repositories due to missing credentials callback.
 
 ## [0.1.2] - 2025-07-20
 

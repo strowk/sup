@@ -666,23 +666,12 @@ fn push(repo: &Repository, branch: &str) -> anyhow::Result<()> {
     let refspec = format!("refs/heads/{}:refs/heads/{}", branch, branch);
     let mut callbacks = git2::RemoteCallbacks::new();
     callbacks.credentials(|url, username_from_url, allowed_types| {
-        if allowed_types.is_ssh_key() {
-            if let Some(username) = username_from_url {
-                return git2::Cred::ssh_key_from_agent(username);
-            } else {
-                return Err(git2::Error::from_str("No username for SSH key auth"));
-            }
-        }
-        // Try credential helpers for HTTPS/HTTP
-        if allowed_types.is_user_pass_plaintext() {
-            if let Ok(config) = repo.config() {
-                if let Ok(cred) = git2::Cred::credential_helper(&config, url, username_from_url) {
-                    return Ok(cred);
-                }
-            }
-        }
-        // Fallback to default
-        git2::Cred::default()
+        crate::credentials::callback(
+            url,
+            username_from_url,
+            &allowed_types,
+            repo,
+        )
     });
     let mut push_options = git2::PushOptions::new();
     push_options.remote_callbacks(callbacks);
