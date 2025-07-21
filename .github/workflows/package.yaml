@@ -46,9 +46,7 @@ jobs:
           cp target/x86_64-unknown-linux-gnu/debian/git-sup_${version}-1_amd64.deb git-sup_${version}-1_amd64.deb
           reprepro -Vb repo includedeb any "git-sup_${version}-1_amd64.deb"
           gpg --export $KEY_ID > repo/pubkey.gpg
-          
-          # TODO: Generate index.html
-          # cp index.html repo/
+          cp packages/debian/index.html repo/index.html
 
       - name: Deploy APT repository to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
