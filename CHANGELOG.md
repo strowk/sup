@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Removed .git/sup.lock file when execution is terminated from Ctrl+C.
+
 ### Changed
 
 - Added multiple progress bars for better visibility of operation state.

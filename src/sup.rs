@@ -9,7 +9,7 @@ use std::fs::{self, File};
 use std::io::Read;
 use std::io::Write;
 use std::path::Path;
-use std::process;
+use std::process::{self, exit};
 use std::time::Duration;
 use tracing::{debug, error, warn};
 
@@ -153,6 +153,12 @@ pub fn run_sup(
         }
     }
     let _lock_guard = LockGuard { path: lock_path };
+
+    ctrlc::set_handler(move || {
+        let _ = std::fs::remove_file(lock_path);
+        exit(0)
+    })?;
+
     let mut state = SupState::load()?;
     if abort {
         let state_for_abort = state;
