@@ -72,9 +72,9 @@ impl Pulling {
                 objects_progress.set_style(
                     ProgressStyle::default_bar()
                         .template(&format!(
-                            "Received {} objects at {} ({})",
+                            "Received {} objects at {}s ({})",
                             stats.received_objects(),
-                            format!("{}s", objects_progress.elapsed().as_secs()),
+                            objects_progress.elapsed().as_secs(),
                             indicatif::HumanBytes(bytes)
                         ))
                         .unwrap()
@@ -102,9 +102,9 @@ impl Pulling {
                 deltas_progress.set_style(
                     ProgressStyle::default_bar()
                         .template(&format!(
-                            "Resolved {} deltas at {}",
+                            "Resolved {} deltas at {}s",
                             stats.indexed_deltas(),
-                            format!("{}s", deltas_progress.elapsed().as_secs())
+                            deltas_progress.elapsed().as_secs()
                         ))
                         .unwrap()
                         .progress_chars("=>-"),
