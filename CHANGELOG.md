@@ -8,7 +8,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
-WIP
+### Changed
+
+- Added multiple progress bars for better visibility of operation state.
 
 ## [0.1.3] - 2025-07-21
 

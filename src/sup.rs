@@ -334,8 +334,10 @@ pub fn run_sup(
                                     let tree = repo.find_tree(tree_id)?;
                                     let sig = repo.signature()?;
                                     let parent_commit = repo.head()?.peel_to_commit()?;
-                                    // Run pre-commit hook if present
-                                    if let Err(e) = hooks::run_hook(&repo, "pre-commit", &[]) {
+                                    // Run pre-commit hook if present, must suspend progress bar
+                                    if let Err(e) = committing_progress
+                                        .suspend(|| hooks::run_hook(&repo, "pre-commit", &[]))
+                                    {
                                         error!("pre-commit hook failed: {}", e);
                                         state = SupState::Idle;
                                         state.save()?;
@@ -345,9 +347,9 @@ pub fn run_sup(
                                     let mut commit_msg_file = tempfile::NamedTempFile::new()?;
                                     commit_msg_file.write_all(msg.as_bytes())?;
                                     let commit_msg_path = commit_msg_file.path().to_str().unwrap();
-                                    if let Err(e) =
+                                    if let Err(e) = committing_progress.suspend(|| {
                                         hooks::run_hook(&repo, "commit-msg", &[commit_msg_path])
-                                    {
+                                    }) {
                                         error!("commit-msg hook failed: {}", e);
                                         state = SupState::Idle;
                                         state.save()?;
@@ -366,7 +368,7 @@ pub fn run_sup(
                                     let head = repo.head()?;
                                     if let Some(branch) = head.shorthand() {
                                         let pushing_progress = ui.get_pushing_progress_bar(branch);
-                                        if let Err(e) = push(&repo, branch) {
+                                        if let Err(e) = push(&repo, branch, &pushing_progress) {
                                             error!("Failed to push branch '{}': {}", branch, e);
                                             state = SupState::Idle;
                                             state.save()?;
@@ -396,7 +398,7 @@ pub fn run_sup(
                 return Ok(());
             }
             _ => {
-                anyhow::bail!("No interrupted operation to continue");
+                anyhow::bail!("No interrupted operation to continue, {:?}", state);
             }
         }
     }
@@ -534,8 +536,10 @@ pub fn run_sup(
                     // If --message/-m is provided, stage and commit all changes
                     if let Some(ref msg) = message {
                         let committing_progress = ui.get_committing_stashed_changes_progress_bar();
-                        // Run pre-commit hook if present
-                        if let Err(e) = hooks::run_hook(&repo, "pre-commit", &[]) {
+                        // Run pre-commit hook if present, must suspend progress bar
+                        if let Err(e) = committing_progress
+                            .suspend(|| hooks::run_hook(&repo, "pre-commit", &[]))
+                        {
                             error!("pre-commit hook failed: {}", e);
                             state = SupState::Idle;
                             state.save()?;
@@ -545,7 +549,9 @@ pub fn run_sup(
                         let mut commit_msg_file = tempfile::NamedTempFile::new()?;
                         commit_msg_file.write_all(msg.as_bytes())?;
                         let commit_msg_path = commit_msg_file.path().to_str().unwrap();
-                        if let Err(e) = hooks::run_hook(&repo, "commit-msg", &[commit_msg_path]) {
+                        if let Err(e) = committing_progress
+                            .suspend(|| hooks::run_hook(&repo, "commit-msg", &[commit_msg_path]))
+                        {
                             error!("commit-msg hook failed: {}", e);
                             state = SupState::Idle;
                             state.save()?;
@@ -565,7 +571,7 @@ pub fn run_sup(
                         let head = repo.head()?;
                         if let Some(branch) = head.shorthand() {
                             let pushing_progress = ui.get_pushing_progress_bar(branch);
-                            if let Err(e) = push(&repo, branch) {
+                            if let Err(e) = push(&repo, branch, &pushing_progress) {
                                 error!("Failed to push branch '{}': {}", branch, e);
                                 state = SupState::Idle;
                                 state.save()?;
@@ -596,9 +602,9 @@ pub fn run_sup(
     Ok(())
 }
 
-fn push(repo: &Repository, branch: &str) -> anyhow::Result<()> {
+fn push(repo: &Repository, branch: &str, pushing_progress: &ProgressBar) -> anyhow::Result<()> {
     // Run pre-push hook if present
-    hooks::run_hook(repo, "pre-push", &["origin"])?;
+    pushing_progress.suspend(|| hooks::run_hook(repo, "pre-push", &["origin"]))?;
     let mut remote = repo.find_remote("origin")?;
     let refspec = format!("refs/heads/{}:refs/heads/{}", branch, branch);
     let mut callbacks = git2::RemoteCallbacks::new();
@@ -643,8 +649,10 @@ impl UI {
         progress.set_message("Stashing local changes");
         progress.enable_steady_tick(Duration::from_millis(100));
         progress.set_style(
-            ProgressStyle::with_template("{prefix:.bold.dim} {spinner:.green} {wide_msg} :{elapsed}  ")
-                .expect("Failed to parse stashing progress style"),
+            ProgressStyle::with_template(
+                "{prefix:.bold.dim} {spinner:.green} {wide_msg} :{elapsed}  ",
+            )
+            .expect("Failed to parse stashing progress style"),
         );
         progress.set_prefix(format!("[{}/{}]", self.steps_count, self.total_steps));
         self.next_step();
@@ -660,8 +668,10 @@ impl UI {
         progress.set_message("Applying stashed changes");
         progress.enable_steady_tick(Duration::from_millis(100));
         progress.set_style(
-            ProgressStyle::with_template("{prefix:.bold.dim} {spinner:.green} {wide_msg} :{elapsed}  ")
-                .expect("Failed to parse applying stash progress style"),
+            ProgressStyle::with_template(
+                "{prefix:.bold.dim} {spinner:.green} {wide_msg} :{elapsed}  ",
+            )
+            .expect("Failed to parse applying stash progress style"),
         );
         progress.set_prefix(format!("[{}/{}]", self.steps_count, self.total_steps));
         self.next_step();
@@ -677,8 +687,10 @@ impl UI {
         progress.set_message("Pulling remote changes");
         progress.enable_steady_tick(Duration::from_millis(100));
         progress.set_style(
-            ProgressStyle::with_template("{prefix:.bold.dim} {spinner:.green} {wide_msg} :{elapsed}  ")
-                .expect("Failed to parse pulling progress style"),
+            ProgressStyle::with_template(
+                "{prefix:.bold.dim} {spinner:.green} {wide_msg} :{elapsed}  ",
+            )
+            .expect("Failed to parse pulling progress style"),
         );
         progress.set_prefix(format!("[{}/{}]", self.steps_count, self.total_steps));
         self.next_step();
@@ -708,8 +720,10 @@ impl UI {
         ));
         progress.enable_steady_tick(Duration::from_millis(100));
         progress.set_style(
-            ProgressStyle::with_template("{prefix:.bold.dim} {spinner:.green} {wide_msg} :{elapsed}  ")
-                .expect("Failed to parse reset progress style"),
+            ProgressStyle::with_template(
+                "{prefix:.bold.dim} {spinner:.green} {wide_msg} :{elapsed}  ",
+            )
+            .expect("Failed to parse reset progress style"),
         );
         progress.set_prefix(format!("[{}/{}]", self.steps_count, self.total_steps));
         self.next_step();
@@ -728,8 +742,10 @@ impl UI {
         progress.set_message("Restoring stashed changes after abort");
         progress.enable_steady_tick(Duration::from_millis(100));
         progress.set_style(
-            ProgressStyle::with_template("{prefix:.bold.dim} {spinner:.green} {wide_msg} :{elapsed}  ")
-                .expect("Failed to parse restoring stashed changes progress style"),
+            ProgressStyle::with_template(
+                "{prefix:.bold.dim} {spinner:.green} {wide_msg} :{elapsed}  ",
+            )
+            .expect("Failed to parse restoring stashed changes progress style"),
         );
         progress.set_prefix(format!("[{}/{}]", self.steps_count, self.total_steps));
         self.next_step();
@@ -745,8 +761,10 @@ impl UI {
         progress.set_message("Committing stashed changes");
         progress.enable_steady_tick(Duration::from_millis(100));
         progress.set_style(
-            ProgressStyle::with_template("{prefix:.bold.dim} {spinner:.green} {wide_msg} :{elapsed}  ")
-                .expect("Failed to parse committing stashed changes progress style"),
+            ProgressStyle::with_template(
+                "{prefix:.bold.dim} {spinner:.green} {wide_msg} :{elapsed}  ",
+            )
+            .expect("Failed to parse committing stashed changes progress style"),
         );
         progress.set_prefix(format!("[{}/{}]", self.steps_count, self.total_steps));
         self.next_step();
@@ -762,8 +780,10 @@ impl UI {
         progress.set_message(format!("Pushing branch '{}'", branch));
         progress.enable_steady_tick(Duration::from_millis(100));
         progress.set_style(
-            ProgressStyle::with_template("{prefix:.bold.dim} {spinner:.green} {wide_msg} :{elapsed}  ")
-                .expect("Failed to parse pushing progress style"),
+            ProgressStyle::with_template(
+                "{prefix:.bold.dim} {spinner:.green} {wide_msg} :{elapsed}  ",
+            )
+            .expect("Failed to parse pushing progress style"),
         );
         progress.set_prefix(format!("[{}/{}]", self.steps_count, self.total_steps));
         self.next_step();
@@ -789,8 +809,10 @@ impl UI {
         progress.set_message("Finishing merge in progress (creating merge commit)");
         progress.enable_steady_tick(Duration::from_millis(100));
         progress.set_style(
-            ProgressStyle::with_template("{prefix:.bold.dim} {spinner:.green} {wide_msg} :{elapsed}  ")
-                .expect("Failed to parse finishing merge progress style"),
+            ProgressStyle::with_template(
+                "{prefix:.bold.dim} {spinner:.green} {wide_msg} :{elapsed}  ",
+            )
+            .expect("Failed to parse finishing merge progress style"),
         );
         progress.set_prefix(format!("[{}/{}]", self.steps_count, self.total_steps));
         self.next_step();
