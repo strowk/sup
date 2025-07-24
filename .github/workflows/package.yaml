@@ -1,6 +1,11 @@
 on:
   workflow_dispatch:
   workflow_call:
+    secrets:
+      GPG_PRIVATE_KEY:
+        required: true
+      KEY_ID:
+        required: true
 
 jobs:
   package-debian:
@@ -10,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
-      KEY_ID: ${{ vars.KEY_ID }}
+      KEY_ID: ${{ secrets.KEY_ID }}
 
     steps:
       - name: Checkout repository
@@ -48,9 +53,14 @@ jobs:
           reprepro -Vb repo includedeb any "git-sup_${version}-1_amd64.deb"
           gpg --export $KEY_ID > repo/pubkey.gpg
           cp packages/debian/index.html repo/index.html
+          packages/scoop/update-manifest.sh
+          cp packages/scoop/sup.json repo/scoop.json
 
       - name: Deploy APT repository to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./repo
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          KEY_ID: ${{ secrets.KEY_ID }}
+

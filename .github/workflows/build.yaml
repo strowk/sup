@@ -136,16 +136,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: main
-      - name: Update scoop
-        run: bash scoop/update-manifest.sh
-      - name: Commit changes
-        if: >
-          github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-        run: |
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-          git add scoop
-          git commit -m "Update scoop manifest"
       - name: Push changes
         if: >
           github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
