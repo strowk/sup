@@ -66,6 +66,24 @@ scoop install https://raw.githubusercontent.com/strowk/sup/main/scoop/sup.json
 scoop update sup
 ```
 
+### Linux using deb package
+
+Prepare repository like this:
+
+```bash
+curl https://raw.githubusercontent.com/strowk/sup/refs/heads/main/packages/debian/pubkey.asc | gpg --dearmor > strowk-sup.gpg
+sudo install -o root -g root -m 644 strowk-sup.gpg /usr/share/keyrings/
+rm strowk-sup.gpg
+sudo sh -c 'echo "deb [arch=amd64 signed-by=/usr/share/keyrings/strowk-sup.gpg] https://strowk.github.io/sup any main" > /etc/apt/sources.list.d/strowk-sup.list'
+sudo apt-get update
+```
+
+Then you can install (and update) the package with:
+
+```bash
+sudo apt-get install -y git-sup
+```
+
 ### With bash script
 
 In bash shell run:
