@@ -150,6 +150,6 @@ jobs:
       pages: write
       contents: write
     uses: ./.github/workflows/package.yaml
-    with:
+    secrets:
       GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
       KEY_ID: ${{ secrets.KEY_ID }}
