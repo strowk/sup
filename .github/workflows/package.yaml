@@ -53,7 +53,7 @@ jobs:
           reprepro -Vb repo includedeb any "git-sup_${version}-1_amd64.deb"
           gpg --export $KEY_ID > repo/pubkey.gpg
           cp packages/debian/index.html repo/index.html
-          packages/scoop/update-manifest.sh
+          bash packages/scoop/update-manifest.sh
           cp packages/scoop/sup.json repo/scoop.json
 
       - name: Deploy APT repository to GitHub Pages
