@@ -8,7 +8,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
-WIP
+### Changed
+
+- When continuing after stash was applied with conflicts and resolved, the stash is now dropped (if confirmed) after optionally committing and pushing changes.
 
 ## [0.1.4] - 2025-07-23
 

@@ -31,6 +31,13 @@ pub struct Cli {
     /// you can provide a commit message using this flag.
     #[argh(option, short = 'm')]
     pub message: Option<String>,
+
+    /// skip confirmation prompt
+    /// 
+    /// Automatically confirm the prompt about removing stashed changes
+    /// during --continue run when stash was already applied.
+    #[argh(switch, short = 'y')]
+    pub yes: bool,
 }
 
 impl Cli {

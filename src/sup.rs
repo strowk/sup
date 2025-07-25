@@ -38,6 +38,7 @@ enum SupState {
     },
     Interrupted {
         stash_created: bool,
+        stash_applied: bool,
         original_head: Option<String>,
         message: Option<String>,
     },
@@ -47,7 +48,7 @@ enum SupState {
 enum SupStateSerde {
     Idle,
     InProgress(bool, Option<String>, Option<String>),
-    Interrupted(bool, Option<String>, Option<String>),
+    Interrupted(bool, Option<String>, Option<String>, bool),
 }
 
 impl From<SupState> for SupStateSerde {
@@ -63,7 +64,8 @@ impl From<SupState> for SupStateSerde {
                 stash_created,
                 original_head,
                 message,
-            } => SupStateSerde::Interrupted(stash_created, original_head, message),
+                stash_applied,
+            } => SupStateSerde::Interrupted(stash_created, original_head, message, stash_applied),
         }
     }
 }
@@ -79,11 +81,12 @@ impl From<SupStateSerde> for SupState {
                     message,
                 }
             }
-            SupStateSerde::Interrupted(stash_created, original_head, message) => {
+            SupStateSerde::Interrupted(stash_created, original_head, message, stash_applied) => {
                 SupState::Interrupted {
                     stash_created,
                     original_head,
                     message,
+                    stash_applied,
                 }
             }
         }
@@ -121,6 +124,7 @@ pub fn run_sup(
     abort: bool,
     version: bool,
     message: Option<String>,
+    yes: bool,
 ) -> Result<()> {
     if version {
         println!("sup version {}", env!("CARGO_PKG_VERSION"));
@@ -236,6 +240,7 @@ pub fn run_sup(
                 stash_created,
                 original_head,
                 message,
+                stash_applied,
             } => {
                 let mut steps_total = 1;
                 if original_head.is_some() {
@@ -288,116 +293,18 @@ pub fn run_sup(
                     debug!("Merge commit created and merge state cleaned up");
                     ui.finish_finishing_merge_progress(progress);
                 }
+
                 // 2. Apply stash if it was created
                 if stash_created {
-                    let applying_stash_progress = ui.get_applying_stash_progress_bar();
-                    // Ensure index is clean before applying stash
-                    repo.reset(
-                        repo.head()?.peel_to_commit()?.as_object(),
-                        git2::ResetType::Mixed,
-                        None,
+                    apply_stash_and_commit(
+                        &mut repo,
+                        stash_created,
+                        stash_applied,
+                        &original_head,
+                        &message,
+                        &mut ui,
+                        yes,
                     )?;
-                    // Use stash_apply and only drop if no conflicts
-                    let stash_apply_result: std::result::Result<(), git2::Error> =
-                        repo.stash_apply(0, None);
-                    ui.finish_applying_stash_progress(applying_stash_progress);
-                    match stash_apply_result {
-                        Ok(_) => {
-                            debug!("Stash applied");
-                            let mut has_conflicts = false;
-                            {
-                                let statuses = repo.statuses(None)?;
-                                for entry in statuses.iter() {
-                                    let s = entry.status();
-                                    if s.is_conflicted() {
-                                        has_conflicts = true;
-                                        break;
-                                    }
-                                }
-                            }
-                            if has_conflicts {
-                                error!("Conflicts detected after stash apply");
-                                state = SupState::Interrupted {
-                                    stash_created,
-                                    original_head: original_head.clone(),
-                                    message: message.clone(),
-                                };
-                                state.save()?;
-                                anyhow::bail!("Conflicts detected after stash apply");
-                            } else {
-                                // If message is present, stage and commit all changes
-                                if let Some(ref msg) = message {
-                                    let committing_progress =
-                                        ui.get_committing_stashed_changes_progress_bar();
-                                    let mut index = repo.index()?;
-                                    index.add_all(
-                                        ["*"].iter(),
-                                        git2::IndexAddOption::DEFAULT,
-                                        None,
-                                    )?;
-                                    index.write()?;
-                                    let tree_id = index.write_tree()?;
-                                    let tree = repo.find_tree(tree_id)?;
-                                    let sig = repo.signature()?;
-                                    let parent_commit = repo.head()?.peel_to_commit()?;
-                                    // Run pre-commit hook if present, must suspend progress bar
-                                    if let Err(e) = committing_progress
-                                        .suspend(|| hooks::run_hook(&repo, "pre-commit", &[]))
-                                    {
-                                        error!("pre-commit hook failed: {}", e);
-                                        state = SupState::Idle;
-                                        state.save()?;
-                                        return Err(e);
-                                    }
-                                    // Prepare commit message file for commit-msg hook
-                                    let mut commit_msg_file = tempfile::NamedTempFile::new()?;
-                                    commit_msg_file.write_all(msg.as_bytes())?;
-                                    let commit_msg_path = commit_msg_file.path().to_str().unwrap();
-                                    if let Err(e) = committing_progress.suspend(|| {
-                                        hooks::run_hook(&repo, "commit-msg", &[commit_msg_path])
-                                    }) {
-                                        error!("commit-msg hook failed: {}", e);
-                                        state = SupState::Idle;
-                                        state.save()?;
-                                        return Err(e);
-                                    }
-                                    repo.commit(
-                                        Some("HEAD"),
-                                        &sig,
-                                        &sig,
-                                        msg,
-                                        &tree,
-                                        &[&parent_commit],
-                                    )?;
-                                    ui.finish_committing_stashed_changes(committing_progress);
-                                    // Push the current branch using libgit2
-                                    let head = repo.head()?;
-                                    if let Some(branch) = head.shorthand() {
-                                        let pushing_progress = ui.get_pushing_progress_bar(branch);
-                                        if let Err(e) = push(&repo, branch, &pushing_progress) {
-                                            error!("Failed to push branch '{}': {}", branch, e);
-                                            state = SupState::Idle;
-                                            state.save()?;
-                                            return Err(e);
-                                        }
-                                        ui.finish_pushing_progress(pushing_progress, branch);
-                                    }
-                                }
-                                debug!("Dropping stash entry after successful apply");
-                                repo.stash_drop(0)?;
-                            }
-                        }
-                        Err(e) => {
-                            error!("Failed to apply stash: {}", e);
-                            state = SupState::Interrupted {
-                                stash_created,
-                                original_head: original_head.clone(),
-                                message: message.clone(),
-                            };
-                            state.save()?;
-                            anyhow::bail!("Failed to apply stash");
-                        }
-                    }
                 }
                 SupState::clear()?;
                 ui.log_completed();
@@ -446,6 +353,7 @@ pub fn run_sup(
                 stash_created,
                 original_head,
                 message: message.clone(),
+                stash_applied: false,
             };
             state.save()?;
             anyhow::bail!("git pull failed");
@@ -488,6 +396,7 @@ pub fn run_sup(
                 stash_created,
                 original_head,
                 message: message.clone(),
+                stash_applied: false,
             };
             state.save()?;
             anyhow::bail!("git pull failed: {e}");
@@ -506,105 +415,159 @@ pub fn run_sup(
     state.save()?;
 
     if stash_created {
-        // Ensure index is clean before applying stashed changes
-        repo.reset(
-            repo.head()?.peel_to_commit()?.as_object(),
-            git2::ResetType::Mixed,
-            None,
+        apply_stash_and_commit(
+            &mut repo,
+            stash_created,
+            false,
+            &original_head,
+            &message,
+            &mut ui,
+            yes,
         )?;
-        let applying_stash_progress = ui.get_applying_stash_progress_bar();
-        let apply_res = repo.stash_apply(0, None);
-        ui.finish_applying_stash_progress(applying_stash_progress);
-        match apply_res {
-            Ok(_) => {
-                debug!("Stash applied, checking for conflicts");
-                // Check for conflicts after stash pop
-                let mut has_conflicts = false;
-                let statuses = repo.statuses(None)?;
-                for entry in statuses.iter() {
-                    let s = entry.status();
-                    if s.is_conflicted() {
-                        has_conflicts = true;
-                        break;
-                    }
-                }
-                if has_conflicts {
-                    error!("Conflicts detected after stash apply");
-                    state = SupState::Interrupted {
-                        stash_created,
-                        original_head,
-                        message: message.clone(),
-                    };
-                    state.save()?;
-                    anyhow::bail!("Conflicts detected after stash apply");
-                } else {
-                    debug!("Stash applied successfully with no conflicts");
-                    // If --message/-m is provided, stage and commit all changes
-                    if let Some(ref msg) = message {
-                        let committing_progress = ui.get_committing_stashed_changes_progress_bar();
-                        // Run pre-commit hook if present, must suspend progress bar
-                        if let Err(e) = committing_progress
-                            .suspend(|| hooks::run_hook(&repo, "pre-commit", &[]))
-                        {
-                            error!("pre-commit hook failed: {}", e);
-                            state = SupState::Idle;
-                            state.save()?;
-                            return Err(e);
-                        }
-                        // Prepare commit message file for commit-msg hook
-                        let mut commit_msg_file = tempfile::NamedTempFile::new()?;
-                        commit_msg_file.write_all(msg.as_bytes())?;
-                        let commit_msg_path = commit_msg_file.path().to_str().unwrap();
-                        if let Err(e) = committing_progress
-                            .suspend(|| hooks::run_hook(&repo, "commit-msg", &[commit_msg_path]))
-                        {
-                            error!("commit-msg hook failed: {}", e);
-                            state = SupState::Idle;
-                            state.save()?;
-                            return Err(e);
-                        }
+    }
+    SupState::clear()?;
+    ui.log_completed();
+    // LockGuard will remove the lock file here
+    Ok(())
+}
 
-                        let mut index = repo.index()?;
-                        index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None)?;
-                        index.write()?;
-                        let tree_id = index.write_tree()?;
-                        let tree = repo.find_tree(tree_id)?;
-                        let sig = repo.signature()?;
-                        let parent_commit = repo.head()?.peel_to_commit()?;
-                        repo.commit(Some("HEAD"), &sig, &sig, msg, &tree, &[&parent_commit])?;
-                        ui.finish_committing_stashed_changes(committing_progress);
-                        // Push the current branch using libgit2
-                        let head = repo.head()?;
-                        if let Some(branch) = head.shorthand() {
-                            let pushing_progress = ui.get_pushing_progress_bar(branch);
-                            if let Err(e) = push(&repo, branch, &pushing_progress) {
-                                error!("Failed to push branch '{}': {}", branch, e);
-                                state = SupState::Idle;
-                                state.save()?;
-                                return Err(e);
-                            }
-                            ui.finish_pushing_progress(pushing_progress, branch);
-                        }
-                    }
-                }
-            }
-            Err(e) => {
-                error!("Failed to apply stash: {}", e);
-                state = SupState::Interrupted {
+fn check_conflicts(repo: &Repository) -> Result<bool> {
+    let statuses = repo.statuses(None)?;
+    for entry in statuses.iter() {
+        if entry.status().is_conflicted() {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+fn apply_stash_and_commit(
+    repo: &mut Repository,
+    stash_created: bool,
+    stash_applied: bool,
+    original_head: &Option<String>,
+    message: &Option<String>,
+    ui: &mut UI,
+    yes: bool,
+) -> Result<(), anyhow::Error> {
+    if stash_applied {
+        let has_conflicts = check_conflicts(repo)?;
+        if has_conflicts {
+            error!("Conflicts detected before dropping stash");
+            anyhow::bail!("Conflicts detected, cannot continue");
+        }
+        // If --message/-m is provided, stage and commit all changes
+        stage_and_commit_with_hooks(repo, message, ui)?;
+
+        if yes {
+            debug!("Dropping stash entry since stash was applied previously");
+            repo.stash_drop(0)?;
+            return Ok(());
+        }
+        let res = dialoguer::Confirm::new()
+            .with_prompt("Stash was already applied, do you want to drop it?")
+            .default(!yes)
+            .interact()?;
+        if res {
+            debug!("Dropping stash entry since stash was applied previously");
+            repo.stash_drop(0)?;
+            return Ok(());
+        }
+        return Ok(());
+    }
+    let applying_stash_progress = ui.get_applying_stash_progress_bar();
+    // Ensure index is clean before applying stashed changes
+    repo.reset(
+        repo.head()?.peel_to_commit()?.as_object(),
+        git2::ResetType::Mixed,
+        None,
+    )?;
+    // Use stash_apply and only drop if no conflicts
+    let apply_res = repo.stash_apply(0, None);
+    ui.finish_applying_stash_progress(applying_stash_progress);
+    match apply_res {
+        Ok(_) => {
+            debug!("Stash applied, checking for conflicts");
+            let has_conflicts = check_conflicts(repo)?;
+            if has_conflicts {
+                error!("Conflicts detected after stash apply");
+                SupState::Interrupted {
                     stash_created,
-                    original_head,
+                    original_head: original_head.clone(),
                     message: message.clone(),
-                };
-                state.save()?;
-                anyhow::bail!("Failed to apply stash");
+                    stash_applied: true,
+                }
+                .save()?;
+                anyhow::bail!("Conflicts detected after stash apply");
+            } else {
+                debug!("Stash applied successfully with no conflicts");
+                // If --message/-m is provided, stage and commit all changes
+                stage_and_commit_with_hooks(repo, message, ui)?;
+                debug!("Dropping stash entry after successful apply");
+                repo.stash_drop(0)?;
             }
         }
-        debug!("Dropping stash entry");
-        repo.stash_drop(0)?;
+        Err(e) => {
+            error!("Failed to apply stash: {}", e);
+            SupState::Interrupted {
+                stash_created,
+                original_head: original_head.clone(),
+                message: message.clone(),
+                stash_applied: true,
+            }
+            .save()?;
+            anyhow::bail!("Failed to apply stash");
+        }
+    };
+    Ok(())
+}
+
+fn stage_and_commit_with_hooks(
+    repo: &Repository,
+    message: &Option<String>,
+    ui: &mut UI,
+) -> Result<(), anyhow::Error> {
+    if let Some(ref msg) = message {
+        let committing_progress = ui.get_committing_stashed_changes_progress_bar();
+        // Run pre-commit hook if present, must suspend progress bar
+        if let Err(e) = committing_progress.suspend(|| hooks::run_hook(repo, "pre-commit", &[])) {
+            error!("pre-commit hook failed: {}", e);
+            SupState::Idle.save()?;
+            return Err(e);
+        }
+        // Prepare commit message file for commit-msg hook
+        let mut commit_msg_file = tempfile::NamedTempFile::new()?;
+        commit_msg_file.write_all(msg.as_bytes())?;
+        let commit_msg_path = commit_msg_file.path().to_str().unwrap();
+        if let Err(e) =
+            committing_progress.suspend(|| hooks::run_hook(repo, "commit-msg", &[commit_msg_path]))
+        {
+            error!("commit-msg hook failed: {}", e);
+            SupState::Idle.save()?;
+            return Err(e);
+        }
+
+        let mut index = repo.index()?;
+        index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None)?;
+        index.write()?;
+        let tree_id = index.write_tree()?;
+        let tree = repo.find_tree(tree_id)?;
+        let sig = repo.signature()?;
+        let parent_commit = repo.head()?.peel_to_commit()?;
+        repo.commit(Some("HEAD"), &sig, &sig, msg, &tree, &[&parent_commit])?;
+        ui.finish_committing_stashed_changes(committing_progress);
+        // Push the current branch using libgit2
+        let head = repo.head()?;
+        if let Some(branch) = head.shorthand() {
+            let pushing_progress = ui.get_pushing_progress_bar(branch);
+            if let Err(e) = push(repo, branch, &pushing_progress) {
+                error!("Failed to push branch '{}': {}", branch, e);
+                SupState::Idle.save()?;
+                return Err(e);
+            }
+            ui.finish_pushing_progress(pushing_progress, branch);
+        };
     }
-    ui.log_completed();
-    SupState::clear()?;
-    // LockGuard will remove the lock file here
     Ok(())
 }
 
