@@ -1,6 +1,6 @@
 [package]
 name = "sup"
-version = "0.1.4"
+version = "0.1.5"
 edition = "2021"
 description = "A tool for Trunk-Based Development to safely and quickly push code to git repository."
 

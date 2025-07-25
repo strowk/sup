@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+WIP
+
+## [0.1.5] - 2025-07-25
+
 ### Changed
 
 - When continuing after stash was applied with conflicts and resolved, the stash is now dropped (if confirmed) after optionally committing and pushing changes.
@@ -85,7 +89,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - Basic functionality to stash uncommitted changes, pull from remote, and restore changes.
 
 <!-- next-url -->
-[Unreleased]: https://github.com/strowk/sup/compare/v0.1.4...HEAD
+[Unreleased]: https://github.com/strowk/sup/compare/v0.1.5...HEAD
+[0.1.5]: https://github.com/strowk/sup/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/strowk/sup/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/strowk/sup/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/strowk/sup/compare/v0.1.1...v0.1.2
