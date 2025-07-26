@@ -54,7 +54,8 @@ jobs:
           gpg --export $KEY_ID > repo/pubkey.gpg
           cp packages/debian/index.html repo/index.html
           bash packages/scoop/update-manifest.sh
-          cp packages/scoop/sup.json repo/scoop.json
+          mkdir -p repo/scoop
+          cp packages/scoop/sup.json repo/scoop/sup.json
 
       - name: Deploy APT repository to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
