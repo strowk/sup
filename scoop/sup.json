@@ -1,0 +1,8 @@
+{
+    "bin":  "sup.exe",
+    "license":  "MIT",
+    "version":  "0.1.6",
+    "homepage":  "https://github.com/strowk/sup",
+    "extract_dir":  "target/x86_64-pc-windows-gnu/release",
+    "url":  "https://github.com/strowk/sup/releases/download/v0.1.6/sup-x86_64-pc-windows-gnu.tar.gz"
+}
