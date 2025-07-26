@@ -8,7 +8,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
-WIP
+### Changed
+
+- Shortened description of command from `--help`.
 
 ## [0.1.6] - 2025-07-26
 
