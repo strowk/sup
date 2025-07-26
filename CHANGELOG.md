@@ -8,7 +8,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
-WIP
+### Fixed
+
+- Corrected issue with location of scoop bucket that broken windows installation.
 
 ## [0.1.5] - 2025-07-25
 
