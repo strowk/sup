@@ -57,7 +57,7 @@ sup -m "Your commit message"  # Short form for --message
 ### Windows with [Scoop](https://github.com/ScoopInstaller/Scoop)
 
 ```sh
-scoop install https://raw.githubusercontent.com/strowk/sup/main/scoop/sup.json
+scoop install https://strowk.github.io/sup/scoop/sup.json
 ```
 
 , or if you already have it installed with scoop:
