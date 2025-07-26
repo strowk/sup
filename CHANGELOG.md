@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+WIP
+
+## [0.1.6] - 2025-07-26
+
 ### Fixed
 
 - Corrected issue with location of scoop bucket that broken windows installation.
@@ -91,7 +95,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - Basic functionality to stash uncommitted changes, pull from remote, and restore changes.
 
 <!-- next-url -->
-[Unreleased]: https://github.com/strowk/sup/compare/v0.1.5...HEAD
+[Unreleased]: https://github.com/strowk/sup/compare/v0.1.6...HEAD
+[0.1.6]: https://github.com/strowk/sup/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/strowk/sup/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/strowk/sup/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/strowk/sup/compare/v0.1.2...v0.1.3
