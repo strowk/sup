@@ -8,7 +8,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
-WIP
+### Fixed
+
+- Keep progress bar final message visible for main steps.
 
 ## [0.1.7] - 2025-07-27
 
