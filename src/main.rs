@@ -1,8 +1,10 @@
+mod ui;
 mod cli;
 mod credentials;
 mod hooks;
 mod pull;
 mod sup;
+mod serde;
 
 fn main() {
     let cli = cli::Cli::parse();

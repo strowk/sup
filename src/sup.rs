@@ -1,6 +1,6 @@
 use crate::hooks;
+use crate::ui::UI;
 use anyhow::{Context, Result};
-use console::Emoji;
 use git2::{ErrorCode, Repository, StashFlags};
 use indicatif::ProgressStyle;
 use serde::{Deserialize, Serialize};
@@ -20,16 +20,10 @@ use tracing_indicatif::IndicatifLayer;
 use tracing_subscriber::filter::Targets;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
+use crate::serde::SupStateSerde;
 
 const STATE_FILE: &str = ".git/sup_state";
 const LOCK_FILE: &str = ".git/sup.lock";
-
-static FLOPPY_DISK: Emoji<'_, '_> = Emoji("🗃️  ", "");
-static DOWN_ARROW: Emoji<'_, '_> = Emoji("🔽  ", "");
-static ROCKET: Emoji<'_, '_> = Emoji("🚀 ", "");
-static CHECKMARK: Emoji<'_, '_> = Emoji("✅  ", "");
-static BOX: Emoji<'_, '_> = Emoji("📦  ", "");
-static RELOAD: Emoji<'_, '_> = Emoji("🔄  ", "");
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 #[serde(
@@ -37,7 +31,7 @@ static RELOAD: Emoji<'_, '_> = Emoji("🔄  ", "");
     into = "SupStateSerde",
     rename_all = "snake_case"
 )]
-enum SupState {
+pub(crate) enum SupState {
     Idle,
     InProgress {
         stash_created: bool,
@@ -50,55 +44,6 @@ enum SupState {
         original_head: Option<String>,
         message: Option<String>,
     },
-}
-
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
-enum SupStateSerde {
-    Idle,
-    InProgress(bool, Option<String>, Option<String>),
-    Interrupted(bool, Option<String>, Option<String>, bool),
-}
-
-impl From<SupState> for SupStateSerde {
-    fn from(state: SupState) -> Self {
-        match state {
-            SupState::Idle => SupStateSerde::Idle,
-            SupState::InProgress {
-                stash_created,
-                original_head,
-                message,
-            } => SupStateSerde::InProgress(stash_created, original_head, message),
-            SupState::Interrupted {
-                stash_created,
-                original_head,
-                message,
-                stash_applied,
-            } => SupStateSerde::Interrupted(stash_created, original_head, message, stash_applied),
-        }
-    }
-}
-
-impl From<SupStateSerde> for SupState {
-    fn from(state: SupStateSerde) -> Self {
-        match state {
-            SupStateSerde::Idle => SupState::Idle,
-            SupStateSerde::InProgress(stash_created, original_head, message) => {
-                SupState::InProgress {
-                    stash_created,
-                    original_head,
-                    message,
-                }
-            }
-            SupStateSerde::Interrupted(stash_created, original_head, message, stash_applied) => {
-                SupState::Interrupted {
-                    stash_created,
-                    original_head,
-                    message,
-                    stash_applied,
-                }
-            }
-        }
-    }
 }
 
 impl SupState {
@@ -193,7 +138,7 @@ pub fn run_sup(
 
     ctrlc::set_handler(move || {
         let _ = std::fs::remove_file(lock_path);
-        exit(0)
+        exit(1)
     })?;
 
     let mut state = SupState::load()?;
@@ -675,66 +620,3 @@ fn push(repo: &Repository, branch: &str, no_verify: bool) -> anyhow::Result<()> 
     Ok(())
 }
 
-struct UI {}
-
-impl UI {
-    fn new() -> Self {
-        UI {}
-    }
-
-    fn log_completed(&self) {
-        println!("     {CHECKMARK}Operation completed");
-    }
-
-    fn configure_stashing_progress(&self, span: &Span) {
-        span.pb_set_message("Stashing local changes");
-        span.pb_set_finish_message(&format!("{FLOPPY_DISK}Stashed local changes"));
-    }
-
-    fn configure_applying_stash_progress(&self, span: &Span) {
-        span.pb_set_message("Applying stashed changes");
-        span.pb_set_finish_message(&format!("{BOX}Applied stashed changes"));
-    }
-
-    fn configure_pulling_progress(&self, span: &Span) {
-        span.pb_set_message("Pulling remote changes");
-        span.pb_set_finish_message(&format!("{DOWN_ARROW}Pulled remote changes"));
-    }
-
-    fn log_abort(&mut self) {
-        println!("{RELOAD}Aborting and rolling back operation");
-    }
-
-    fn configure_resetting_progress(&mut self, span: &Span, orig_head: &str) {
-        span.pb_set_message(&format!(
-            "Resetting branch to original commit before pull: {orig_head}"
-        ));
-        span.pb_set_finish_message(&format!(
-            "{FLOPPY_DISK}Reset branch to commit before pull: {orig_head}"
-        ));
-    }
-
-    fn configure_restoring_stashed_changes_for_abort_progress(&mut self, span: &Span) {
-        span.pb_set_message("Restoring stashed changes after abort");
-        span.pb_set_finish_message(&format!("{BOX}Restored stashed changes"));
-    }
-
-    fn configure_committing_stashed_changes_progress_bar(&mut self, span: &Span) {
-        span.pb_set_message("Committing stashed changes");
-        span.pb_set_finish_message(&format!("{CHECKMARK}Committed stashed changes"));
-    }
-
-    fn configure_pushing_progress(&mut self, span: &Span, branch: &str) {
-        span.pb_set_message(&format!("Pushing branch '{branch}'"));
-        span.pb_set_finish_message(&format!("{ROCKET}Pushed branch '{branch}'"));
-    }
-
-    fn log_continuing_interrupted_operation(&self) {
-        println!("{RELOAD}Continuing interrupted operation",);
-    }
-
-    fn configure_finishing_merge_progress(&mut self, span: &Span) {
-        span.pb_set_message("Finishing merge in progress (creating merge commit)");
-        span.pb_set_finish_message(&format!("{FLOPPY_DISK}Finished merge commit"));
-    }
-}

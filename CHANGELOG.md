@@ -8,7 +8,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
-WIP
+### Changed
+
+- Return exit code 1 when `sup` is interrupted with Ctrl+C, instead of 0.
 
 ## [0.2.0] - 2025-07-27
 
