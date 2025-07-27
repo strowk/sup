@@ -22,6 +22,10 @@ pub struct Cli {
     /// skip confirmation prompt when removing stash after conflict
     #[argh(switch, short = 'y')]
     pub yes: bool,
+
+    /// no verify would skip pre-commit and pre-push hooks if you are sure that your changes are ok
+    #[argh(switch, short = 'n')]
+    pub no_verify: bool,
 }
 
 impl Cli {

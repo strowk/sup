@@ -796,6 +796,81 @@ fn test_stash_and_pop_uncommitted_change_then_commit_with_pre_push_hook_and_fail
 }
 
 #[test]
+fn test_stash_and_pop_uncommitted_change_then_commit_with_failing_pre_push_hook_and_then_skip_push_hook() {
+    let temp = tempfile::tempdir().unwrap();
+    let repo1 = temp.path().join("repo1_bare");
+    let repo2 = temp.path().join("repo2");
+    // Create bare repo1
+    run_git(temp.path(), &["init", "--bare", "repo1_bare"]);
+
+    // Clone repo1 to repo2 (creates working directory)
+    let repo1_url = file_url(&repo1);
+    run_git(temp.path(), &["clone", &repo1_url, "repo2"]);
+    run_git(&repo2, &["config", "user.email", "test@example.com"]);
+    run_git(&repo2, &["config", "user.name", "Test"]);
+
+    // Initial commit in repo2, then push to bare repo1
+    fs::write(repo2.join("file.txt"), "initial\n").unwrap();
+    run_git(&repo2, &["add", "."]);
+    run_git(&repo2, &["commit", "-m", "initial"]);
+    run_git(&repo2, &["push", "origin", "master"]);
+
+    // Simulate remote change: clone repo1 to temp remote_work, commit, push
+    let remote_work = temp.path().join("remote_work");
+    run_git(temp.path(), &["clone", &repo1_url, "remote_work"]);
+    run_git(&remote_work, &["config", "user.email", "test@example.com"]);
+    run_git(&remote_work, &["config", "user.name", "Test"]);
+    fs::write(remote_work.join("file.txt"), "updated\n").unwrap();
+    run_git(&remote_work, &["add", "."]);
+    run_git(&remote_work, &["commit", "-m", "update"]);
+    run_git(&remote_work, &["push", "origin", "master"]);
+
+    // make uncommitted change in repo2
+    fs::write(repo2.join("file1.txt"), "localnewfile\n").unwrap();
+
+    // Add a pre-push hook that fails
+    let hooks_dir = repo2.join(".git/hooks");
+    fs::create_dir_all(&hooks_dir).unwrap();
+    #[cfg(windows)]
+    let hook_path = hooks_dir.join("pre-push.bat");
+    #[cfg(not(windows))]
+    let hook_path = hooks_dir.join("pre-push");
+    #[cfg(windows)]
+    fs::write(&hook_path, b"exit 1\n").unwrap();
+    #[cfg(not(windows))]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::write(&hook_path, b"#!/bin/sh\nexit 1\n").unwrap();
+        let mut perms = fs::metadata(&hook_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&hook_path, perms).unwrap();
+    }
+
+    // run sup in repo2, should fail due to pre-push hook
+    run_sup(&repo2, &["-m", "commit message"], true);
+
+    // but can skip the push hook by passing --no-verify
+    run_sup(&repo2, &["-m", "commit message", "--no-verify"], false);
+
+    insta::with_settings!({filters => vec![
+        (r"\b[[:xdigit:]]{7}-initial\b", "[HASH]-initial"),
+    ]}, {
+    insta::assert_snapshot!(
+    git_log(&repo2),
+    @r"
+    * commit-message
+    * update
+    | *   On-master-sup-stash
+    |/|\  
+    | | * untracked-files-on-master-[HASH]-initial
+    | * index-on-master-[HASH]-initial
+    |/  
+    * initial
+    ");
+    });
+}
+
+#[test]
 fn test_stash_and_pop_uncommitted_nonconflicting_changes_then_commit_with_hook_in_different_dir() {
     let temp = tempfile::tempdir().unwrap();
     let repo1 = temp.path().join("repo1_bare");

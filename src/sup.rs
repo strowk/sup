@@ -133,6 +133,7 @@ pub fn run_sup(
     version: bool,
     message: Option<String>,
     yes: bool,
+    no_verify: bool,
 ) -> Result<()> {
     if version {
         println!("sup version {}", env!("CARGO_PKG_VERSION"));
@@ -254,6 +255,7 @@ pub fn run_sup(
                         &message,
                         &mut ui,
                         yes,
+                        no_verify,
                     )?;
                 }
                 SupState::clear()?;
@@ -298,6 +300,7 @@ pub fn run_sup(
             &message,
             &mut ui,
             yes,
+            no_verify,
         )?;
     }
     SupState::clear()?;
@@ -518,6 +521,7 @@ fn apply_stash_and_commit(
     message: &Option<String>,
     ui: &mut UI,
     yes: bool,
+    no_verify: bool,
 ) -> Result<(), anyhow::Error> {
     if stash_applied {
         let has_conflicts = check_conflicts(repo)?;
@@ -526,7 +530,7 @@ fn apply_stash_and_commit(
             anyhow::bail!("Conflicts detected, cannot continue");
         }
         // If --message/-m is provided, stage and commit all changes
-        stage_and_commit_with_hooks(repo, message, ui)?;
+        stage_and_commit_with_hooks(repo, message, ui, no_verify)?;
 
         if yes {
             debug!("Dropping stash entry since stash was applied previously");
@@ -562,7 +566,7 @@ fn apply_stash_and_commit(
             } else {
                 debug!("Stash applied successfully with no conflicts");
                 // If --message/-m is provided, stage and commit all changes
-                stage_and_commit_with_hooks(repo, message, ui)?;
+                stage_and_commit_with_hooks(repo, message, ui, no_verify)?;
                 debug!("Dropping stash entry after successful apply");
                 repo.stash_drop(0)?;
             }
@@ -583,13 +587,20 @@ fn apply_stash_and_commit(
 }
 
 #[instrument(skip_all)]
-fn commit_stashed_changes(ui: &mut UI, repo: &Repository, msg: &str) -> Result<()> {
+fn commit_stashed_changes(
+    ui: &mut UI,
+    repo: &Repository,
+    msg: &str,
+    no_verify: bool,
+) -> Result<()> {
     ui.configure_committing_stashed_changes_progress_bar(&Span::current());
-    // Run pre-commit hook if present, must suspend progress bar
-    if let Err(e) = hooks::run_hook(repo, "pre-commit", &[]) {
-        error!("pre-commit hook failed: {}", e);
-        SupState::Idle.save()?;
-        return Err(e);
+    if !no_verify { // --no-verify skips pre-commit hook
+        // Run pre-commit hook if present, must suspend progress bar
+        if let Err(e) = hooks::run_hook(repo, "pre-commit", &[]) {
+            error!("pre-commit hook failed: {}", e);
+            SupState::Idle.save()?;
+            return Err(e);
+        }
     }
     // Prepare commit message file for commit-msg hook
     let mut commit_msg_file = tempfile::NamedTempFile::new()?;
@@ -613,12 +624,12 @@ fn commit_stashed_changes(ui: &mut UI, repo: &Repository, msg: &str) -> Result<(
 }
 
 #[instrument(skip_all)]
-fn push_committed_changes(ui: &mut UI, repo: &Repository) -> Result<()> {
+fn push_committed_changes(ui: &mut UI, repo: &Repository, no_verify: bool) -> Result<()> {
     // Push the current branch using libgit2
     let head = repo.head()?;
     if let Some(branch) = head.shorthand() {
         ui.configure_pushing_progress(&Span::current(), branch);
-        if let Err(e) = push(repo, branch) {
+        if let Err(e) = push(repo, branch, no_verify) {
             error!("Failed to push branch '{}': {}", branch, e);
             SupState::Idle.save()?;
             return Err(e);
@@ -631,18 +642,21 @@ fn stage_and_commit_with_hooks(
     repo: &Repository,
     message: &Option<String>,
     ui: &mut UI,
+    no_verify: bool,
 ) -> Result<(), anyhow::Error> {
     if let Some(ref msg) = message {
-        commit_stashed_changes(ui, repo, msg)?;
+        commit_stashed_changes(ui, repo, msg, no_verify)?;
         // Push the current branch using libgit2
-        push_committed_changes(ui, repo)?;
+        push_committed_changes(ui, repo, no_verify)?;
     }
     Ok(())
 }
 
-fn push(repo: &Repository, branch: &str) -> anyhow::Result<()> {
+fn push(repo: &Repository, branch: &str, no_verify: bool) -> anyhow::Result<()> {
     // Run pre-push hook if present
-    hooks::run_hook(repo, "pre-push", &["origin"])?;
+    if !no_verify { // --no-verify skips pre-push hook
+        hooks::run_hook(repo, "pre-push", &["origin"])?;
+    }
     let mut remote = repo.find_remote("origin")?;
     let refspec = format!("refs/heads/{branch}:refs/heads/{branch}");
     let mut callbacks = git2::RemoteCallbacks::new();

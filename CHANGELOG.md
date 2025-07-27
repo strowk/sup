@@ -8,7 +8,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
-WIP
+### Added
+
+- Support for `--no-verify` flag to skip pre-commit and pre-push hooks if doing commit and push operations.
 
 ## [0.1.9] - 2025-07-27
 
