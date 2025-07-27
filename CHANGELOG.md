@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+WIP
+
+## [0.1.7] - 2025-07-27
+
 ### Changed
 
 - Shortened description of command from `--help`.
@@ -98,7 +102,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - Basic functionality to stash uncommitted changes, pull from remote, and restore changes.
 
 <!-- next-url -->
-[Unreleased]: https://github.com/strowk/sup/compare/v0.1.6...HEAD
+[Unreleased]: https://github.com/strowk/sup/compare/v0.1.7...HEAD
+[0.1.7]: https://github.com/strowk/sup/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/strowk/sup/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/strowk/sup/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/strowk/sup/compare/v0.1.3...v0.1.4
