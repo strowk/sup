@@ -6,6 +6,14 @@ CACHE_FROM = { value = "type=local,src=../../docker-cache", condition = { env_no
     "CACHE_FROM",
 ] } }
 
+[tasks.patch]
+command = "cargo"
+args = ["release", "patch", "--execute"]
+
+[tasks.minor]
+command = "cargo"
+args = ["release", "minor", "--execute"]
+
 [tasks.install-changelog-lint-deps]
 script_runner = "@shell"
 cwd = "changelog"
