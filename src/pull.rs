@@ -37,38 +37,21 @@ impl Pulling {
     ) -> Result<git2::AnnotatedCommit<'a>, git2::Error> {
         let mut cb = git2::RemoteCallbacks::new();
 
-        let objects_span = info_span!("objects_fetching");
-        objects_span.pb_set_style(
-            &ProgressStyle::with_template(
-                "{elapsed:>4.bold.dim} {msg} {wide_bar:.cyan/blue} {pos:>7}/{len:7}  ",
-            )
-            .unwrap()
-            .progress_chars("=>-"),
-        );
-        objects_span.pb_set_message("Receiving objects");
-
-        let deltas_span = info_span!("deltas_resolving");
-        deltas_span.pb_set_style(
-            &ProgressStyle::default_bar()
-                .template("{msg}")
-                .unwrap()
-                .progress_chars("  "),
-        );
-        deltas_span.pb_set_message("Waiting to resolve deltas");
-
         let progress_style = ProgressStyle::with_template(
             "{elapsed:>4.bold.dim} {msg} {wide_bar:.cyan/blue} {pos:>7}/{len:7}  ",
         )
         .unwrap()
         .progress_chars("=>-");
 
+        let objects_span = info_span!("objects_fetching");
+        objects_span.pb_set_style(&progress_style.clone());
+        objects_span.pb_set_message("Receiving objects");
+
         let mut overflow_already_logged = false;
 
         let mut configured_objects_total = false;
 
-        let mut configured_deltas_total = false;
-
-        let mut deltas_span = Some(deltas_span.entered());
+        let mut deltas_span_entered = None;
         let mut objects_span = Some(objects_span.entered());
 
         cb.transfer_progress(move |stats| {
@@ -118,14 +101,16 @@ impl Pulling {
                 }
             }
 
-            if let Some(processing_deltas_span) = deltas_span.as_mut() {
-                if !configured_deltas_total && stats.total_deltas() > 0 {
-                    processing_deltas_span
+            if deltas_span_entered.is_none() && stats.total_deltas() > 0 {
+                let deltas_span = info_span!("deltas_resolving");
+                deltas_span
                         .pb_set_length(stats.total_deltas().try_into().unwrap_or(u64::MAX));
-                    processing_deltas_span.pb_set_message("Resolving deltas");
-                    processing_deltas_span.pb_set_style(&progress_style);
-                    configured_deltas_total = true;
-                }
+                    deltas_span.pb_set_message("Resolving deltas");
+                    deltas_span.pb_set_style(&progress_style);
+                deltas_span_entered = Some(deltas_span.entered());
+            }
+
+            if let Some(processing_deltas_span) = deltas_span_entered.as_mut() {
                 processing_deltas_span
                     .pb_set_position(stats.indexed_deltas().try_into().unwrap_or(u64::MAX));
 
@@ -141,7 +126,7 @@ impl Pulling {
                     processing_deltas_span.pb_tick();
                     processing_deltas_span.pb_set_finish_message("");
                     tracing::debug!("Finished resolving deltas");
-                    if let Some(span) = deltas_span.take() {
+                    if let Some(span) = deltas_span_entered.take() {
                         span.exit();
                     }
                 }
