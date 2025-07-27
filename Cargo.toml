@@ -22,6 +22,7 @@ which = "8.0.0"
 # Temp replacement for closing progress bars with finish message
 [dependencies.tracing-indicatif]
 git = "https://github.com/strowk/tracing-indicatif"
+rev = "b41e56d1a93367768916665d4f69566fa033a850"
 
 [dev-dependencies]
 insta = { version = "1.43.1", features = ["filters"] }

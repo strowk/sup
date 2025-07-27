@@ -999,7 +999,7 @@ dependencies = [
 [[package]]
 name = "tracing-indicatif"
 version = "0.3.11"
-source = "git+https://github.com/strowk/tracing-indicatif#1ef8a37773e21c8da92696578908146e84bee9d9"
+source = "git+https://github.com/strowk/tracing-indicatif?rev=b41e56d1a93367768916665d4f69566fa033a850#b41e56d1a93367768916665d4f69566fa033a850"
 dependencies = [
  "indicatif",
  "tracing",
