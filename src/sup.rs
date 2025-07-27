@@ -1,17 +1,25 @@
 use crate::hooks;
 use anyhow::{Context, Result};
-use console::{style, Emoji};
+use console::Emoji;
 use git2::{ErrorCode, Repository, StashFlags};
-use indicatif::{ProgressBar, ProgressStyle};
+use indicatif::ProgressStyle;
 use serde::{Deserialize, Serialize};
+use std::env;
 use std::fs::OpenOptions;
 use std::fs::{self, File};
 use std::io::Read;
 use std::io::Write;
 use std::path::Path;
 use std::process::{self, exit};
-use std::time::Duration;
+use std::str::FromStr as _;
+use tracing::instrument;
+use tracing::Span;
 use tracing::{debug, error, warn};
+use tracing_indicatif::span_ext::IndicatifSpanExt;
+use tracing_indicatif::IndicatifLayer;
+use tracing_subscriber::filter::Targets;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 
 const STATE_FILE: &str = ".git/sup_state";
 const LOCK_FILE: &str = ".git/sup.lock";
@@ -130,7 +138,31 @@ pub fn run_sup(
         println!("sup version {}", env!("CARGO_PKG_VERSION"));
         process::exit(0);
     }
-    tracing_subscriber::fmt::init();
+    let indicatif_layer = IndicatifLayer::new().with_progress_style(
+        ProgressStyle::with_template("{elapsed:>4.bold.dim} {spinner:.green} {wide_msg}  ")
+            .expect("Failed to parse progress style"),
+    );
+    let targets = match env::var("RUST_LOG") {
+        Ok(var) => Targets::from_str(&var)
+            .map_err(|e| {
+                eprintln!("Ignoring `RUST_LOG={var:?}`: {e}");
+            })
+            .unwrap_or_default(),
+        Err(env::VarError::NotPresent) => {
+            Targets::new().with_default(tracing_subscriber::FmtSubscriber::DEFAULT_MAX_LEVEL)
+        }
+        Err(e) => {
+            eprintln!("Ignoring `RUST_LOG`: {e}");
+            Targets::new().with_default(tracing_subscriber::FmtSubscriber::DEFAULT_MAX_LEVEL)
+        }
+    };
+
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::fmt::layer().with_writer(indicatif_layer.get_stderr_writer()))
+        .with(indicatif_layer)
+        .with(targets)
+        .init();
+
     // Acquire lock file to prevent concurrent sup runs
     let lock_path = Path::new(LOCK_FILE);
     let _lock_file = match OpenOptions::new()
@@ -172,58 +204,19 @@ pub fn run_sup(
                 original_head,
                 ..
             } => {
-                let mut steps_total = 1;
-                if original_head.is_some() {
-                    steps_total += 1;
-                }
-                if stash_created {
-                    steps_total += 1;
-                }
-                let mut ui = UI::new(steps_total);
+                let mut ui = UI::new();
                 ui.log_abort();
                 if let Some(ref orig_head) = original_head {
-                    let repo = Repository::open(".").context("failed to open git repository")?;
-                    let resetting_progress = ui.get_reset_progress(orig_head);
-                    repo.reset(
-                        &repo.find_object(
-                            git2::Oid::from_str(orig_head)?,
-                            Some(git2::ObjectType::Commit),
-                        )?,
-                        git2::ResetType::Hard,
-                        None,
-                    )?;
-                    ui.finish_reset_progress(resetting_progress, orig_head);
+                    let mut repo =
+                        Repository::open(".").context("failed to open git repository")?;
+                    reset_repo(&mut ui, &mut repo, orig_head)?;
                 }
 
                 // Restore stashed changes if any
                 if stash_created {
                     let mut repo =
                         Repository::open(".").context("failed to open git repository")?;
-                    // Only pop the stash created by sup (with message 'sup stash')
-                    let restoring_progress = ui.get_restoring_stashed_changes_for_abort_progress();
-                    let mut sup_stash_index: Option<usize> = None;
-                    let mut idx = 0;
-                    let _ = repo.stash_foreach(|stash_index, stash_msg, _| {
-                        if stash_index > 0 {
-                            return false; // only last stash can be correct sup stash
-                        }
-                        if stash_msg.ends_with("sup stash") {
-                            sup_stash_index = Some(stash_index);
-                            return false; // stop after finding
-                        }
-                        warn!("Ignoring unrecognized stash {}: {}", idx, stash_msg);
-                        idx += 1;
-                        true
-                    });
-                    if let Some(stash_index) = sup_stash_index {
-                        match repo.stash_pop(stash_index, None) {
-                            Ok(_) => debug!("sup stash applied during abort"),
-                            Err(e) => error!("Failed to apply sup stash during abort: {}", e),
-                        }
-                    } else {
-                        warn!("No sup stash found to apply during abort; likely already popped or not created");
-                    }
-                    ui.finish_restoring_stashed_changes_for_abort(restoring_progress);
+                    pop_stash(&mut ui, &mut repo);
                 }
                 ui.log_completed();
             }
@@ -242,56 +235,13 @@ pub fn run_sup(
                 message,
                 stash_applied,
             } => {
-                let mut steps_total = 1;
-                if original_head.is_some() {
-                    steps_total += 1;
-                }
-                if stash_created {
-                    steps_total += 1;
-                    if message.is_some() {
-                        steps_total += 2; // commit and push
-                    }
-                }
-                let mut ui = UI::new(steps_total);
+                let mut ui = UI::new();
                 ui.log_continuing_interrupted_operation();
 
                 // 1. If a merge is in progress, finish it (assume user resolved conflicts and staged files)
                 let mut repo = Repository::open(".").context("failed to open git repository")?;
                 if repo.state() == git2::RepositoryState::Merge {
-                    let progress = ui.get_finishing_merge_progress();
-
-                    // Try to create a merge commit if index is not conflicted
-                    let mut index = repo.index()?;
-                    if index.has_conflicts() {
-                        anyhow::bail!("Cannot continue: merge conflicts still present. Please resolve and stage all files.");
-                    }
-                    let sig = repo.signature()?;
-                    let tree_id = index.write_tree()?;
-                    let tree = repo.find_tree(tree_id)?;
-                    let head_commit = repo.head()?.peel_to_commit()?;
-                    // Read .git/MERGE_HEAD to get merge parent OIDs
-                    let merge_head_path = Path::new(".git/MERGE_HEAD");
-                    let merge_head_content = std::fs::read_to_string(merge_head_path)
-                        .context("Failed to read .git/MERGE_HEAD")?;
-                    // Collect parent commits as owned values
-                    let mut parent_commits = Vec::new();
-                    parent_commits.push(head_commit);
-                    for line in merge_head_content.lines() {
-                        let oid = git2::Oid::from_str(line.trim())
-                            .context("Invalid OID in MERGE_HEAD")?;
-                        let parent = repo.find_commit(oid)?;
-                        parent_commits.push(parent);
-                    }
-                    if parent_commits.len() < 2 {
-                        anyhow::bail!("No MERGE_HEAD found, cannot complete merge");
-                    }
-                    // Build refs vector for commit
-                    let parent_refs: Vec<&git2::Commit> = parent_commits.iter().collect();
-                    let msg = "Merge commit (sup --continue)";
-                    repo.commit(Some("HEAD"), &sig, &sig, msg, &tree, &parent_refs)?;
-                    repo.cleanup_state()?;
-                    debug!("Merge commit created and merge state cleaned up");
-                    ui.finish_finishing_merge_progress(progress);
+                    merge_repo(&mut ui, &mut repo)?;
                 }
 
                 // 2. Apply stash if it was created
@@ -319,43 +269,166 @@ pub fn run_sup(
         anyhow::bail!("Operation already in progress. To roll back, run with --abort. To continue, run with --continue.");
     }
 
-    let mut ui = UI::new(if message.is_some() { 5 } else { 3 });
+    let mut ui = UI::new();
     let mut repo = Repository::open(".").context("failed to open git repository")?;
 
-    let stashing_progress = ui.get_stashing_progress_bar();
+    let stash_created = stash_changes(&mut ui, &mut repo)?;
 
+    let mut pulling = crate::pull::Pulling {};
+
+    let original_head = pull_changes(&mut repo, &mut pulling, &mut ui, stash_created, &message)?;
+
+    debug!("Checking out the head with force");
+    // checking out the head to ensure that index and working directory are clean
+    checking_out_with_force(&repo)?;
+    // repo.checkout_head(Some(git2::build::CheckoutBuilder::default().force()))?;
+    state = SupState::InProgress {
+        stash_created,
+        original_head: original_head.clone(),
+        message: message.clone(),
+    };
+    state.save()?;
+
+    if stash_created {
+        apply_stash_and_commit(
+            &mut repo,
+            stash_created,
+            false,
+            &original_head,
+            &message,
+            &mut ui,
+            yes,
+        )?;
+    }
+    SupState::clear()?;
+    ui.log_completed();
+    // LockGuard will remove the lock file here
+    Ok(())
+}
+
+#[instrument(skip_all)]
+fn checking_out_with_force(repo: &Repository) -> Result<()> {
+    Span::current().pb_set_message("Checking out HEAD with force");
+    // checking out the head to ensure that index and working directory are clean
+    repo.checkout_head(Some(git2::build::CheckoutBuilder::default().force()))?;
+    Ok(())
+}
+
+#[instrument(skip_all)]
+fn merge_repo(ui: &mut UI, repo: &mut Repository) -> Result<()> {
+    ui.configure_finishing_merge_progress(&Span::current());
+
+    // Try to create a merge commit if index is not conflicted
+    let mut index = repo.index()?;
+    if index.has_conflicts() {
+        anyhow::bail!(
+            "Cannot continue: merge conflicts still present. Please resolve and stage all files."
+        );
+    }
     let sig = repo.signature()?;
-    let stash_result = repo.stash_save(&sig, "sup stash", Some(StashFlags::INCLUDE_UNTRACKED));
-    let stash_created = match stash_result {
-        Ok(_) => true,
-        Err(ref e) if e.code() == ErrorCode::NotFound => {
-            debug!("No changes to stash");
-            false
+    let tree_id = index.write_tree()?;
+    let tree = repo.find_tree(tree_id)?;
+    let head_commit = repo.head()?.peel_to_commit()?;
+    // Read .git/MERGE_HEAD to get merge parent OIDs
+    let merge_head_path = Path::new(".git/MERGE_HEAD");
+    let merge_head_content =
+        std::fs::read_to_string(merge_head_path).context("Failed to read .git/MERGE_HEAD")?;
+    // Collect parent commits as owned values
+    let mut parent_commits = Vec::new();
+    parent_commits.push(head_commit);
+    for line in merge_head_content.lines() {
+        let oid = git2::Oid::from_str(line.trim()).context("Invalid OID in MERGE_HEAD")?;
+        let parent = repo.find_commit(oid)?;
+        parent_commits.push(parent);
+    }
+    if parent_commits.len() < 2 {
+        anyhow::bail!("No MERGE_HEAD found, cannot complete merge");
+    }
+    // Build refs vector for commit
+    let parent_refs: Vec<&git2::Commit> = parent_commits.iter().collect();
+    let msg = "Merge commit (sup --continue)";
+    repo.commit(Some("HEAD"), &sig, &sig, msg, &tree, &parent_refs)?;
+    repo.cleanup_state()?;
+    debug!("Merge commit created and merge state cleaned up");
+    Ok(())
+}
+
+#[instrument(skip_all)]
+fn pop_stash(ui: &mut UI, repo: &mut Repository) {
+    // Only pop the stash created by sup (with message 'sup stash')
+    ui.configure_restoring_stashed_changes_for_abort_progress(&Span::current());
+    let mut sup_stash_index: Option<usize> = None;
+    let mut idx = 0;
+    let _ = repo.stash_foreach(|stash_index, stash_msg, _| {
+        if stash_index > 0 {
+            return false; // only last stash can be correct sup stash
         }
-        Err(e) => return Err(e.into()),
-    };
+        if stash_msg.ends_with("sup stash") {
+            sup_stash_index = Some(stash_index);
+            return false; // stop after finding
+        }
+        warn!("Ignoring unrecognized stash {}: {}", idx, stash_msg);
+        idx += 1;
+        true
+    });
+    if let Some(stash_index) = sup_stash_index {
+        match repo.stash_pop(stash_index, None) {
+            Ok(_) => debug!("sup stash applied during abort"),
+            Err(e) => error!("Failed to apply sup stash during abort: {}", e),
+        }
+    } else {
+        warn!("No sup stash found to apply during abort; likely already popped or not created");
+    }
+}
 
-    // stashing_progress.finish_with_message(format!("{}Stashed local changes", FLOPPY_DISK));
-    ui.finish_stashing_progress(stashing_progress);
+#[instrument(skip_all)]
+fn reset_repo(ui: &mut UI, repo: &mut Repository, orig_head: &str) -> Result<()> {
+    ui.configure_resetting_progress(&Span::current(), orig_head);
+    repo.reset(
+        &repo.find_object(
+            git2::Oid::from_str(orig_head)?,
+            Some(git2::ObjectType::Commit),
+        )?,
+        git2::ResetType::Hard,
+        None,
+    )?;
+    Ok(())
+}
 
-    let mut pulling = crate::pull::Pulling {
-        multi_progress: indicatif::MultiProgress::new(),
-    };
+#[instrument(skip_all)]
+fn check_conflicts(repo: &Repository) -> Result<bool> {
+    Span::current().pb_set_message("Checking for conflicts");
+    let statuses = repo.statuses(None)?;
+    for entry in statuses.iter() {
+        if entry.status().is_conflicted() {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
 
-    let pull_progress = ui.get_pulling_progress_bar(&mut pulling);
+#[instrument(skip_all)]
+fn pull_changes(
+    repo: &mut Repository,
+    pulling: &mut crate::pull::Pulling,
+    ui: &mut UI,
+    stash_created: bool,
+    message: &Option<String>,
+) -> Result<Option<String>> {
+    ui.configure_pulling_progress(&Span::current());
 
     let original_head = Some(repo.head()?.target().map(|oid| oid.to_string())).flatten();
     if std::env::var("PULL_WITH_CLI").is_ok() {
         let status = std::process::Command::new("git").arg("pull").status()?;
         if !status.success() {
             error!("git pull failed");
-            state = SupState::Interrupted {
+            SupState::Interrupted {
                 stash_created,
                 original_head,
                 message: message.clone(),
                 stash_applied: false,
-            };
-            state.save()?;
+            }
+            .save()?;
             anyhow::bail!("git pull failed");
         }
     } else {
@@ -392,53 +465,49 @@ pub fn run_sup(
         };
         if let Err(e) = pulling.pull_run(&args) {
             error!("git pull failed: {}", e);
-            state = SupState::Interrupted {
+            SupState::Interrupted {
                 stash_created,
                 original_head,
                 message: message.clone(),
                 stash_applied: false,
-            };
-            state.save()?;
+            }
+            .save()?;
             anyhow::bail!("git pull failed: {e}");
         }
     }
-    ui.finish_pulling_progress(pull_progress);
 
-    debug!("Checking out the head with force");
-    // checking out the head to ensure that index and working directory are clean
-    repo.checkout_head(Some(git2::build::CheckoutBuilder::default().force()))?;
-    state = SupState::InProgress {
-        stash_created,
-        original_head: original_head.clone(),
-        message: message.clone(),
-    };
-    state.save()?;
-
-    if stash_created {
-        apply_stash_and_commit(
-            &mut repo,
-            stash_created,
-            false,
-            &original_head,
-            &message,
-            &mut ui,
-            yes,
-        )?;
-    }
-    SupState::clear()?;
-    ui.log_completed();
-    // LockGuard will remove the lock file here
-    Ok(())
+    Ok(original_head)
 }
 
-fn check_conflicts(repo: &Repository) -> Result<bool> {
-    let statuses = repo.statuses(None)?;
-    for entry in statuses.iter() {
-        if entry.status().is_conflicted() {
-            return Ok(true);
+#[instrument(skip_all)]
+fn stash_changes(ui: &mut UI, repo: &mut Repository) -> Result<bool, anyhow::Error> {
+    ui.configure_stashing_progress(&Span::current());
+    let sig = repo.signature()?;
+    let stash_result = repo.stash_save(&sig, "sup stash", Some(StashFlags::INCLUDE_UNTRACKED));
+    let stash_created = match stash_result {
+        Ok(_) => true,
+        Err(ref e) if e.code() == ErrorCode::NotFound => {
+            debug!("No changes to stash");
+            false
         }
-    }
-    Ok(false)
+        Err(e) => return Err(e.into()),
+    };
+    Ok(stash_created)
+}
+
+#[instrument(skip_all)]
+fn apply_stash(repo: &mut Repository, ui: &mut UI) -> Result<()> {
+    ui.configure_applying_stash_progress(&Span::current());
+    // Ensure index is clean before applying stashed changes
+    repo.reset(
+        repo.head()?.peel_to_commit()?.as_object(),
+        git2::ResetType::Mixed,
+        None,
+    )?;
+    // Use stash_apply and only drop if no conflicts
+    let apply_res = repo.stash_apply(0, None);
+    apply_res?;
+    Ok(())
 }
 
 fn apply_stash_and_commit(
@@ -475,16 +544,7 @@ fn apply_stash_and_commit(
         }
         return Ok(());
     }
-    let applying_stash_progress = ui.get_applying_stash_progress_bar();
-    // Ensure index is clean before applying stashed changes
-    repo.reset(
-        repo.head()?.peel_to_commit()?.as_object(),
-        git2::ResetType::Mixed,
-        None,
-    )?;
-    // Use stash_apply and only drop if no conflicts
-    let apply_res = repo.stash_apply(0, None);
-    ui.finish_applying_stash_progress(applying_stash_progress);
+    let apply_res = apply_stash(repo, ui);
     match apply_res {
         Ok(_) => {
             debug!("Stash applied, checking for conflicts");
@@ -522,60 +582,80 @@ fn apply_stash_and_commit(
     Ok(())
 }
 
+#[instrument(skip_all)]
+fn commit_stashed_changes(ui: &mut UI, repo: &Repository, msg: &str) -> Result<()> {
+    ui.configure_committing_stashed_changes_progress_bar(&Span::current());
+    // Run pre-commit hook if present, must suspend progress bar
+
+    // if let Err(e) =
+    // tracing_indicatif::suspend_tracing_indicatif(|| hooks::run_hook(repo, "pre-commit", &[]))
+    // {
+    if let Err(e) = hooks::run_hook(repo, "pre-commit", &[]) {
+        error!("pre-commit hook failed: {}", e);
+        SupState::Idle.save()?;
+        return Err(e);
+    }
+    // Prepare commit message file for commit-msg hook
+    let mut commit_msg_file = tempfile::NamedTempFile::new()?;
+    commit_msg_file.write_all(msg.as_bytes())?;
+    let commit_msg_path = commit_msg_file.path().to_str().unwrap();
+    if let Err(e) = hooks::run_hook(repo, "commit-msg", &[commit_msg_path])
+    // tracing_indicatif::suspend_tracing_indicatif(|| {
+    //     hooks::run_hook(repo, "commit-msg", &[commit_msg_path])
+    // })
+    {
+        error!("commit-msg hook failed: {}", e);
+        SupState::Idle.save()?;
+        return Err(e);
+    }
+
+    let mut index = repo.index()?;
+    index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None)?;
+    index.write()?;
+    let tree_id = index.write_tree()?;
+    let tree = repo.find_tree(tree_id)?;
+    let sig = repo.signature()?;
+    let parent_commit = repo.head()?.peel_to_commit()?;
+    repo.commit(Some("HEAD"), &sig, &sig, msg, &tree, &[&parent_commit])?;
+    Ok(())
+}
+
+#[instrument(skip_all)]
+fn push_committed_changes(ui: &mut UI, repo: &Repository) -> Result<()> {
+    // Push the current branch using libgit2
+    let head = repo.head()?;
+    if let Some(branch) = head.shorthand() {
+        ui.configure_pushing_progress(&Span::current(), branch);
+        if let Err(e) = push(repo, branch) {
+            error!("Failed to push branch '{}': {}", branch, e);
+            SupState::Idle.save()?;
+            return Err(e);
+        }
+    }
+    Ok(())
+}
+
 fn stage_and_commit_with_hooks(
     repo: &Repository,
     message: &Option<String>,
     ui: &mut UI,
 ) -> Result<(), anyhow::Error> {
     if let Some(ref msg) = message {
-        let committing_progress = ui.get_committing_stashed_changes_progress_bar();
-        // Run pre-commit hook if present, must suspend progress bar
-        if let Err(e) = committing_progress.suspend(|| hooks::run_hook(repo, "pre-commit", &[])) {
-            error!("pre-commit hook failed: {}", e);
-            SupState::Idle.save()?;
-            return Err(e);
-        }
-        // Prepare commit message file for commit-msg hook
-        let mut commit_msg_file = tempfile::NamedTempFile::new()?;
-        commit_msg_file.write_all(msg.as_bytes())?;
-        let commit_msg_path = commit_msg_file.path().to_str().unwrap();
-        if let Err(e) =
-            committing_progress.suspend(|| hooks::run_hook(repo, "commit-msg", &[commit_msg_path]))
-        {
-            error!("commit-msg hook failed: {}", e);
-            SupState::Idle.save()?;
-            return Err(e);
-        }
-
-        let mut index = repo.index()?;
-        index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None)?;
-        index.write()?;
-        let tree_id = index.write_tree()?;
-        let tree = repo.find_tree(tree_id)?;
-        let sig = repo.signature()?;
-        let parent_commit = repo.head()?.peel_to_commit()?;
-        repo.commit(Some("HEAD"), &sig, &sig, msg, &tree, &[&parent_commit])?;
-        ui.finish_committing_stashed_changes(committing_progress);
+        commit_stashed_changes(ui, repo, msg)?;
         // Push the current branch using libgit2
-        let head = repo.head()?;
-        if let Some(branch) = head.shorthand() {
-            let pushing_progress = ui.get_pushing_progress_bar(branch);
-            if let Err(e) = push(repo, branch, &pushing_progress) {
-                error!("Failed to push branch '{}': {}", branch, e);
-                SupState::Idle.save()?;
-                return Err(e);
-            }
-            ui.finish_pushing_progress(pushing_progress, branch);
-        };
+        push_committed_changes(ui, repo)?;
     }
     Ok(())
 }
 
-fn push(repo: &Repository, branch: &str, pushing_progress: &ProgressBar) -> anyhow::Result<()> {
+fn push(repo: &Repository, branch: &str) -> anyhow::Result<()> {
     // Run pre-push hook if present
-    pushing_progress.suspend(|| hooks::run_hook(repo, "pre-push", &["origin"]))?;
+    // tracing_indicatif::suspend_tracing_indicatif(|| {
+    // hooks::run_hook(repo, "pre-push", &["origin"])
+    // })?;
+    hooks::run_hook(repo, "pre-push", &["origin"])?;
     let mut remote = repo.find_remote("origin")?;
-    let refspec = format!("refs/heads/{}:refs/heads/{}", branch, branch);
+    let refspec = format!("refs/heads/{branch}:refs/heads/{branch}");
     let mut callbacks = git2::RemoteCallbacks::new();
     callbacks.credentials(|url, username_from_url, allowed_types| {
         crate::credentials::callback(url, username_from_url, &allowed_types, repo)
@@ -593,202 +673,80 @@ fn push(repo: &Repository, branch: &str, pushing_progress: &ProgressBar) -> anyh
 }
 
 struct UI {
-    steps_count: usize,
-    total_steps: usize,
+    style: ProgressStyle,
 }
 
 impl UI {
-    fn new(total_steps: usize) -> Self {
+    fn new() -> Self {
         UI {
-            steps_count: 1,
-            total_steps,
+            style: ProgressStyle::with_template(
+                "{elapsed:>4.bold.dim} {spinner:.green} {wide_msg}  ",
+            )
+            .expect("Failed to parse progress style"),
         }
     }
 
-    fn next_step(&mut self) {
-        self.steps_count += 1;
-    }
-
     fn log_completed(&self) {
-        println!("        {}Operation completed", CHECKMARK);
+        println!("     {CHECKMARK}Operation completed");
     }
 
-    fn get_stashing_progress_bar(&mut self) -> ProgressBar {
-        let progress = ProgressBar::new_spinner();
-        progress.set_message("Stashing local changes");
-        progress.enable_steady_tick(Duration::from_millis(100));
-        progress.set_style(
-            ProgressStyle::with_template(
-                "{prefix:.bold.dim} {spinner:.green} {wide_msg} :{elapsed}  ",
-            )
-            .expect("Failed to parse stashing progress style"),
-        );
-        progress.set_prefix(format!("[{}/{}]", self.steps_count, self.total_steps));
-        self.next_step();
-        progress
+    fn configure_stashing_progress(&self, span: &Span) {
+        span.pb_set_message("Stashing local changes");
+        span.pb_set_style(&self.style);
+        span.pb_set_finish_message(&format!("{FLOPPY_DISK}Stashed local changes"));
     }
 
-    fn finish_stashing_progress(&self, progress: ProgressBar) {
-        progress.finish_with_message(format!("{}Stashed local changes", FLOPPY_DISK));
+    fn configure_applying_stash_progress(&self, span: &Span) {
+        span.pb_set_message("Applying stashed changes");
+        span.pb_set_style(&self.style);
+        span.pb_set_finish_message(&format!("{BOX}Applied stashed changes"));
     }
 
-    fn get_applying_stash_progress_bar(&mut self) -> ProgressBar {
-        let progress = ProgressBar::new_spinner();
-        progress.set_message("Applying stashed changes");
-        progress.enable_steady_tick(Duration::from_millis(100));
-        progress.set_style(
-            ProgressStyle::with_template(
-                "{prefix:.bold.dim} {spinner:.green} {wide_msg} :{elapsed}  ",
-            )
-            .expect("Failed to parse applying stash progress style"),
-        );
-        progress.set_prefix(format!("[{}/{}]", self.steps_count, self.total_steps));
-        self.next_step();
-        progress
-    }
-
-    fn finish_applying_stash_progress(&self, progress: ProgressBar) {
-        progress.finish_with_message(format!("{}Applied stashed changes", BOX));
-    }
-
-    fn get_pulling_progress_bar(&mut self, pulling: &mut crate::pull::Pulling) -> ProgressBar {
-        let progress = pulling.multi_progress.add(ProgressBar::new_spinner());
-        progress.set_message("Pulling remote changes");
-        progress.enable_steady_tick(Duration::from_millis(100));
-        progress.set_style(
-            ProgressStyle::with_template(
-                "{prefix:.bold.dim} {spinner:.green} {wide_msg} :{elapsed}  ",
-            )
-            .expect("Failed to parse pulling progress style"),
-        );
-        progress.set_prefix(format!("[{}/{}]", self.steps_count, self.total_steps));
-        self.next_step();
-        progress
-    }
-
-    fn finish_pulling_progress(&self, progress: ProgressBar) {
-        progress.finish_with_message(format!("{}Pulled remote changes", DOWN_ARROW));
+    fn configure_pulling_progress(&self, span: &Span) {
+        span.pb_set_message("Pulling remote changes");
+        span.pb_set_style(&self.style);
+        span.pb_set_finish_message(&format!("{DOWN_ARROW}Pulled remote changes"));
     }
 
     fn log_abort(&mut self) {
-        println!(
-            "{} {}Aborting and rolling back operation",
-            style(format!("[{}/{}]", self.steps_count, self.total_steps))
-                .bold()
-                .dim(),
-            RELOAD,
-        );
-        self.next_step();
+        println!("{RELOAD}Aborting and rolling back operation");
     }
 
-    fn get_reset_progress(&mut self, orig_head: &str) -> ProgressBar {
-        let progress = ProgressBar::new_spinner();
-        progress.set_message(format!(
-            "Resetting branch to original commit before pull: {}",
-            orig_head
+    fn configure_resetting_progress(&mut self, span: &Span, orig_head: &str) {
+        span.pb_set_message(&format!(
+            "Resetting branch to original commit before pull: {orig_head}"
         ));
-        progress.enable_steady_tick(Duration::from_millis(100));
-        progress.set_style(
-            ProgressStyle::with_template(
-                "{prefix:.bold.dim} {spinner:.green} {wide_msg} :{elapsed}  ",
-            )
-            .expect("Failed to parse reset progress style"),
-        );
-        progress.set_prefix(format!("[{}/{}]", self.steps_count, self.total_steps));
-        self.next_step();
-        progress
-    }
-
-    fn finish_reset_progress(&self, progress: ProgressBar, orig_head: &str) {
-        progress.finish_with_message(format!(
-            "{}Reset branch to commit before pull: {}",
-            FLOPPY_DISK, orig_head
+        span.pb_set_style(&self.style);
+        span.pb_set_finish_message(&format!(
+            "{FLOPPY_DISK}Reset branch to commit before pull: {orig_head}"
         ));
     }
 
-    fn get_restoring_stashed_changes_for_abort_progress(&mut self) -> ProgressBar {
-        let progress = ProgressBar::new_spinner();
-        progress.set_message("Restoring stashed changes after abort");
-        progress.enable_steady_tick(Duration::from_millis(100));
-        progress.set_style(
-            ProgressStyle::with_template(
-                "{prefix:.bold.dim} {spinner:.green} {wide_msg} :{elapsed}  ",
-            )
-            .expect("Failed to parse restoring stashed changes progress style"),
-        );
-        progress.set_prefix(format!("[{}/{}]", self.steps_count, self.total_steps));
-        self.next_step();
-        progress
+    fn configure_restoring_stashed_changes_for_abort_progress(&mut self, span: &Span) {
+        span.pb_set_message("Restoring stashed changes after abort");
+        span.pb_set_style(&self.style);
+        span.pb_set_finish_message(&format!("{BOX}Restored stashed changes"));
     }
 
-    fn finish_restoring_stashed_changes_for_abort(&self, progress: ProgressBar) {
-        progress.finish_with_message(format!("{}Restored stashed changes", BOX));
+    fn configure_committing_stashed_changes_progress_bar(&mut self, span: &Span) {
+        span.pb_set_message("Committing stashed changes");
+        span.pb_set_style(&self.style);
+        span.pb_set_finish_message(&format!("{CHECKMARK}Committed stashed changes"));
     }
 
-    fn get_committing_stashed_changes_progress_bar(&mut self) -> ProgressBar {
-        let progress = ProgressBar::new_spinner();
-        progress.set_message("Committing stashed changes");
-        progress.enable_steady_tick(Duration::from_millis(100));
-        progress.set_style(
-            ProgressStyle::with_template(
-                "{prefix:.bold.dim} {spinner:.green} {wide_msg} :{elapsed}  ",
-            )
-            .expect("Failed to parse committing stashed changes progress style"),
-        );
-        progress.set_prefix(format!("[{}/{}]", self.steps_count, self.total_steps));
-        self.next_step();
-        progress
-    }
-
-    fn finish_committing_stashed_changes(&self, progress: ProgressBar) {
-        progress.finish_with_message(format!("{}Committed stashed changes", CHECKMARK));
-    }
-
-    fn get_pushing_progress_bar(&mut self, branch: &str) -> ProgressBar {
-        let progress = ProgressBar::new_spinner();
-        progress.set_message(format!("Pushing branch '{}'", branch));
-        progress.enable_steady_tick(Duration::from_millis(100));
-        progress.set_style(
-            ProgressStyle::with_template(
-                "{prefix:.bold.dim} {spinner:.green} {wide_msg} :{elapsed}  ",
-            )
-            .expect("Failed to parse pushing progress style"),
-        );
-        progress.set_prefix(format!("[{}/{}]", self.steps_count, self.total_steps));
-        self.next_step();
-        progress
-    }
-
-    fn finish_pushing_progress(&self, progress: ProgressBar, branch: &str) {
-        progress.finish_with_message(format!("{}Pushed branch '{}'", ROCKET, branch));
+    fn configure_pushing_progress(&mut self, span: &Span, branch: &str) {
+        span.pb_set_message(&format!("Pushing branch '{branch}'"));
+        span.pb_set_style(&self.style);
+        span.pb_set_finish_message(&format!("{ROCKET}Pushed branch '{branch}'"));
     }
 
     fn log_continuing_interrupted_operation(&self) {
-        println!(
-            "{} {}Continuing interrupted operation",
-            style(format!("[{}/{}]", self.steps_count, self.total_steps))
-                .bold()
-                .dim(),
-            RELOAD
-        );
+        println!("{RELOAD}Continuing interrupted operation",);
     }
 
-    fn get_finishing_merge_progress(&mut self) -> ProgressBar {
-        let progress: ProgressBar = ProgressBar::new_spinner();
-        progress.set_message("Finishing merge in progress (creating merge commit)");
-        progress.enable_steady_tick(Duration::from_millis(100));
-        progress.set_style(
-            ProgressStyle::with_template(
-                "{prefix:.bold.dim} {spinner:.green} {wide_msg} :{elapsed}  ",
-            )
-            .expect("Failed to parse finishing merge progress style"),
-        );
-        progress.set_prefix(format!("[{}/{}]", self.steps_count, self.total_steps));
-        self.next_step();
-        progress
-    }
-
-    fn finish_finishing_merge_progress(&self, progress: ProgressBar) {
-        progress.finish_with_message(format!("{}Finished merge commit", FLOPPY_DISK));
+    fn configure_finishing_merge_progress(&mut self, span: &Span) {
+        span.pb_set_message("Finishing merge in progress (creating merge commit)");
+        span.pb_set_style(&self.style);
+        span.pb_set_finish_message(&format!("{FLOPPY_DISK}Finished merge commit"));
     }
 }

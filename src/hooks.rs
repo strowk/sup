@@ -75,21 +75,21 @@ pub fn run_hook(repo: &git2::Repository, hook_name: &str, args: &[&str]) -> Resu
         match status_result {
             Ok(status) => {
                 if !status.success() {
-                    eprintln!("\n--- HOOK DEBUG ---");
-                    eprintln!("Hook path: {:?}", hook);
-                    eprintln!("Args: {:?}", args);
-                    eprintln!("Exit code: {:?}", status.code());
-                    eprintln!("--- END HOOK DEBUG ---\n");
+                    debug!("\n--- HOOK DEBUG ---");
+                    debug!("Hook path: {:?}", hook);
+                    debug!("Args: {:?}", args);
+                    debug!("Exit code: {:?}", status.code());
+                    debug!("--- END HOOK DEBUG ---\n");
                     anyhow::bail!("Hook {:?} failed with exit code {:?}", hook, status.code());
                 }
                 Ok(true)
             }
             Err(e) => {
-                eprintln!("\n--- HOOK DEBUG ---");
-                eprintln!("Hook path: {:?}", hook);
-                eprintln!("Args: {:?}", args);
-                eprintln!("Failed to spawn or wait for hook: {}", e);
-                eprintln!("--- END HOOK DEBUG ---\n");
+                debug!("\n--- HOOK DEBUG ---");
+                debug!("Hook path: {:?}", hook);
+                debug!("Args: {:?}", args);
+                debug!("Failed to spawn or wait for hook: {}", e);
+                debug!("--- END HOOK DEBUG ---\n");
                 Err(anyhow::anyhow!("Failed to run hook: {:?}: {}", hook, e))
             }
         }

@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ### Changed
 
 - Shortened description of command from `--help`.
+- Removed steps counter from progress bars, as it was not always showing correct values.
 
 ## [0.1.6] - 2025-07-26
 

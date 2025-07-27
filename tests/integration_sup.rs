@@ -15,7 +15,7 @@ fn file_url(path: &Path) -> String {
     {
         p = p.trim_start_matches('/').to_string();
     }
-    format!("file:///{}", p)
+    format!("file:///{p}")
 }
 
 use std::env;
@@ -41,7 +41,7 @@ fn run_git(dir: &Path, args: &[&str]) {
         .current_dir(dir)
         .status()
         .expect("failed to run git command");
-    assert!(status.success(), "git command failed: {:?}", args);
+    assert!(status.success(), "git command failed: {args:?}");
 }
 
 fn run_sup(dir: &Path, extra_args: &[&str], expect_failure: bool) {

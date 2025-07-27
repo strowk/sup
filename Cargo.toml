@@ -19,6 +19,10 @@ tracing = "0.1.41"
 tracing-subscriber = "0.3.19"
 which = "8.0.0"
 
+# Temp replacement for closing progress bars with finish message
+[dependencies.tracing-indicatif]
+git = "https://github.com/strowk/tracing-indicatif"
+
 [dev-dependencies]
 insta = { version = "1.43.1", features = ["filters"] }
 tempfile = "3"

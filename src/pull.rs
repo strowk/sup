@@ -12,10 +12,12 @@
  * <http://creativecommons.org/publicdomain/zero/1.0/>.
  */
 
+use console::Emoji;
 use git2::Repository;
-use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
-use std::{str, time::Duration};
+use indicatif::ProgressStyle;
 use structopt::StructOpt;
+use tracing::{info_span, instrument, Span};
+use tracing_indicatif::span_ext::IndicatifSpanExt;
 
 #[derive(StructOpt)]
 pub(crate) struct Args {
@@ -23,9 +25,7 @@ pub(crate) struct Args {
     pub(crate) arg_branch: Option<String>,
 }
 
-pub(crate) struct Pulling {
-    pub(crate) multi_progress: MultiProgress,
-}
+pub(crate) struct Pulling {}
 
 impl Pulling {
     fn do_fetch<'a>(
@@ -37,83 +37,115 @@ impl Pulling {
     ) -> Result<git2::AnnotatedCommit<'a>, git2::Error> {
         let mut cb = git2::RemoteCallbacks::new();
 
-        let m = &self.multi_progress;
-
-        let progress_style =
-            ProgressStyle::with_template("[{elapsed}] {wide_bar:.cyan/blue} {pos:>7}/{len:7} {msg}")
-                .unwrap()
-                .progress_chars("=>-");
-        let objects_progress = m.add(ProgressBar::no_length());
-        objects_progress.set_style(progress_style.clone());
-        objects_progress.set_message("Receiving objects  ");
-
-        let deltas_progress = m.add(ProgressBar::no_length());
-        let not_active_style = ProgressStyle::default_bar()
-            .template("{msg}")
+        let objects_span = info_span!("objects_fetching");
+        objects_span.pb_set_style(
+            &ProgressStyle::with_template(
+                "{elapsed:>4.bold.dim} {msg} {wide_bar:.cyan/blue} {pos:>7}/{len:7}  ",
+            )
             .unwrap()
-            .progress_chars("  ");
-        deltas_progress.set_style(not_active_style);
-        deltas_progress.set_message("Waiting to resolve deltas");
-        
+            .progress_chars("=>-"),
+        );
+        objects_span.pb_set_message("Receiving objects");
+
+        let deltas_span = info_span!("deltas_resolving");
+        deltas_span.pb_set_style(
+            &ProgressStyle::default_bar()
+                .template("{msg}")
+                .unwrap()
+                .progress_chars("  "),
+        );
+        deltas_span.pb_set_message("Waiting to resolve deltas");
+
+        let progress_style = ProgressStyle::with_template(
+            "{elapsed:>4.bold.dim} {msg} {wide_bar:.cyan/blue} {pos:>7}/{len:7}  ",
+        )
+        .unwrap()
+        .progress_chars("=>-");
+
         let mut overflow_already_logged = false;
 
-        cb.transfer_progress(move |stats| {
-            if objects_progress.length().is_none() {
-                objects_progress.set_length(stats.total_objects().try_into().unwrap_or(0));
-            }
-            if deltas_progress.length().is_none() && stats.total_deltas() > 0 {
-                deltas_progress.set_message("Resolving deltas  ");
-                deltas_progress.set_style(progress_style.clone());
-                deltas_progress.set_length(stats.total_deltas().try_into().unwrap_or(0));
-            }
-            if stats.received_objects() == stats.total_objects() && !objects_progress.is_finished()
-            {
-                let bytes: u64 = stats.received_bytes().try_into().unwrap_or(u64::MAX);
-                objects_progress.set_style(
-                    ProgressStyle::default_bar()
-                        .template(&format!(
-                            "Received {} objects at {}s ({})",
-                            stats.received_objects(),
-                            objects_progress.elapsed().as_secs(),
-                            indicatif::HumanBytes(bytes)
-                        ))
-                        .unwrap()
-                        .progress_chars("=>-"),
-                );
-                objects_progress.finish_with_message("");
-            }
+        let mut configured_objects_total = false;
 
-            match stats.received_bytes().try_into() {
-                Ok(received_bytes) => {
-                    objects_progress.set_message(format!(
-                        "Receiving objects ({})  ",
-                        indicatif::HumanBytes(received_bytes)
-                    ));
+        let mut configured_deltas_total = false;
+
+        let mut deltas_span = Some(deltas_span.entered());
+        let mut objects_span = Some(objects_span.entered());
+
+        cb.transfer_progress(move |stats| {
+            if let Some(processing_objects_span) = objects_span.as_mut() {
+                if !configured_objects_total {
+                    if stats.total_objects() > 0 {
+                        processing_objects_span
+                            .pb_set_length(stats.total_objects().try_into().unwrap_or(0));
+                    }
+                    configured_objects_total = true;
                 }
-                Err(_) => {
-                    if !overflow_already_logged {
-                        tracing::warn!("Received objects bytes overflowed");
-                        overflow_already_logged = true;
+                processing_objects_span
+                    .pb_set_position(stats.received_objects().try_into().unwrap_or(u64::MAX));
+
+                match stats.received_bytes().try_into() {
+                    Ok(received_bytes) => {
+                        processing_objects_span.pb_set_message(&format!(
+                            "Receiving objects ({})  ",
+                            indicatif::HumanBytes(received_bytes)
+                        ));
+                    }
+                    Err(_) => {
+                        if !overflow_already_logged {
+                            tracing::warn!("Received objects bytes overflowed");
+                            overflow_already_logged = true;
+                        }
+                    }
+                }
+                if stats.received_objects() == stats.total_objects() {
+                    let bytes: u64 = stats.received_bytes().try_into().unwrap_or(u64::MAX);
+                    processing_objects_span.pb_set_style(
+                        &ProgressStyle::default_bar()
+                            .template(&format!(
+                                "{{elapsed:>4.bold.dim}} Received {} objects ({})",
+                                stats.received_objects(),
+                                indicatif::HumanBytes(bytes)
+                            ))
+                            .unwrap()
+                            .progress_chars("=>-"),
+                    );
+                    processing_objects_span.pb_tick();
+                    processing_objects_span.pb_set_finish_message("");
+                    tracing::debug!("Finished receiving objects");
+                    if let Some(span) = objects_span.take() {
+                        span.exit();
                     }
                 }
             }
 
-            if stats.indexed_deltas() == stats.total_deltas() && stats.total_deltas() > 0 {
-                deltas_progress.set_style(
-                    ProgressStyle::default_bar()
-                        .template(&format!(
-                            "Resolved {} deltas at {}s",
-                            stats.indexed_deltas(),
-                            deltas_progress.elapsed().as_secs()
-                        ))
-                        .unwrap()
-                        .progress_chars("=>-"),
-                );
-                deltas_progress.finish_with_message("");
-            }
-            objects_progress.set_position(stats.received_objects().try_into().unwrap_or(0));
-            deltas_progress.set_position(stats.indexed_deltas().try_into().unwrap_or(0));
+            if let Some(processing_deltas_span) = deltas_span.as_mut() {
+                if !configured_deltas_total && stats.total_deltas() > 0 {
+                    processing_deltas_span
+                        .pb_set_length(stats.total_deltas().try_into().unwrap_or(u64::MAX));
+                    processing_deltas_span.pb_set_message("Resolving deltas");
+                    processing_deltas_span.pb_set_style(&progress_style);
+                    configured_deltas_total = true;
+                }
+                processing_deltas_span
+                    .pb_set_position(stats.indexed_deltas().try_into().unwrap_or(u64::MAX));
 
+                if stats.indexed_deltas() == stats.total_deltas() && stats.total_deltas() > 0 {
+                    processing_deltas_span.pb_set_style(
+                        &ProgressStyle::default_bar()
+                            .template(&format!(
+                                "{{elapsed:>4.bold.dim}} Resolved {} deltas",
+                                stats.indexed_deltas()
+                            ))
+                            .unwrap(),
+                    );
+                    processing_deltas_span.pb_tick();
+                    processing_deltas_span.pb_set_finish_message("");
+                    tracing::debug!("Finished resolving deltas");
+                    if let Some(span) = deltas_span.take() {
+                        span.exit();
+                    }
+                }
+            }
             true
         });
 
@@ -238,12 +270,15 @@ impl Pulling {
         Ok(())
     }
 
+    #[instrument(skip_all)]
     fn do_merge<'a>(
         &mut self,
         repo: &'a Repository,
         remote_branch: &str,
         fetch_commit: git2::AnnotatedCommit<'a>,
     ) -> Result<(), git2::Error> {
+        configure_merge_progress(&Span::current(), remote_branch);
+
         // 1. do a merge analysis
         let analysis = repo.merge_analysis(&[&fetch_commit])?;
 
@@ -252,7 +287,7 @@ impl Pulling {
         if analysis.0.is_fast_forward() {
             tracing::debug!("Doing a fast forward");
             // do a fast forward
-            let refname = format!("refs/heads/{}", remote_branch);
+            let refname = format!("refs/heads/{remote_branch}");
             match repo.find_reference(&refname) {
                 Ok(mut r) => {
                     self.fast_forward(repo, &mut r, &fetch_commit)?;
@@ -295,25 +330,22 @@ impl Pulling {
         let mut remote = repo.find_remote(remote_name)?;
 
         // Build refspec: refs/heads/main:refs/remotes/origin/main
-        let refspec = format!(
-            "refs/heads/{}:refs/remotes/{}/{}",
-            remote_branch, remote_name, remote_branch
-        );
-        let remote_refname = format!("refs/remotes/{}/{}", remote_name, remote_branch);
+        let refspec =
+            format!("refs/heads/{remote_branch}:refs/remotes/{remote_name}/{remote_branch}",);
+        let remote_refname = format!("refs/remotes/{remote_name}/{remote_branch}");
         let fetch_commit = self.do_fetch(&repo, &[&refspec], &mut remote, &remote_refname)?;
-
-        let merge_progress = self.multi_progress.add(ProgressBar::new_spinner());
-        merge_progress
-            .set_style(ProgressStyle::with_template("{spinner:.green} {wide_msg}").unwrap());
-        merge_progress.set_message(format!(
-            "Merging {} into {}",
-            remote_branch,
-            repo.head()?.name().unwrap_or("HEAD")
-        ));
-        merge_progress.enable_steady_tick(Duration::from_millis(100));
-
-        let res = self.do_merge(&repo, remote_branch, fetch_commit);
-        merge_progress.finish_with_message(format!("Merged branch {}", remote_branch));
-        res
+        self.do_merge(&repo, remote_branch, fetch_commit)
     }
+}
+
+static MERGE: Emoji<'_, '_> = Emoji("🔀  ", "");
+
+fn configure_merge_progress(span: &Span, remote_branch: &str) {
+    span.pb_set_message("Merging changes");
+    span.pb_set_style(
+        &ProgressStyle::with_template("{elapsed:>4.bold.dim} {spinner:.green} {wide_msg}  ")
+            .unwrap()
+            .progress_chars("=>-"),
+    );
+    span.pb_set_finish_message(&format!("{MERGE}Merged branch {remote_branch}"));
 }
