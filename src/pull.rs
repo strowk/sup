@@ -342,10 +342,5 @@ static MERGE: Emoji<'_, '_> = Emoji("🔀  ", "");
 
 fn configure_merge_progress(span: &Span, remote_branch: &str) {
     span.pb_set_message("Merging changes");
-    span.pb_set_style(
-        &ProgressStyle::with_template("{elapsed:>4.bold.dim} {spinner:.green} {wide_msg}  ")
-            .unwrap()
-            .progress_chars("=>-"),
-    );
     span.pb_set_finish_message(&format!("{MERGE}Merged branch {remote_branch}"));
 }
