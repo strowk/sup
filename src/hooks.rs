@@ -71,7 +71,7 @@ pub fn run_hook(repo: &git2::Repository, hook_name: &str, args: &[&str]) -> Resu
         // inherit stdout and stderr
         cmd.stdout(Stdio::inherit());
         cmd.stderr(Stdio::inherit());
-        let status_result = cmd.status();
+        let status_result = tracing_indicatif::suspend_tracing_indicatif(|| cmd.status());
         match status_result {
             Ok(status) => {
                 if !status.success() {
