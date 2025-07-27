@@ -8,7 +8,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
-WIP
+### Fixed
+
+- Corrected the order of children of "pulled" progress bar.
 
 ## [0.1.8] - 2025-07-27
 

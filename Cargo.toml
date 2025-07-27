@@ -10,7 +10,11 @@ argh = "0.1.13"
 console = "0.16.0"
 ctrlc = "3.4.7"
 dialoguer = "0.11.0"
-indicatif = "0.18.0"
+# TODO: replace with official crates when they allow
+# to show child progress bars in right order and close
+# them with finish message
+# indicatif = "0.18.0"
+# tracing-indicatif = { version = "0.3.11" }
 serde = { version = "1.0", features = ["derive"] } 
 serde_json = "1.0.140"
 structopt = "0.3.26"
@@ -22,7 +26,13 @@ which = "8.0.0"
 # Temp replacement for closing progress bars with finish message
 [dependencies.tracing-indicatif]
 git = "https://github.com/strowk/tracing-indicatif"
-rev = "b41e56d1a93367768916665d4f69566fa033a850"
+rev = "2b4014fb55c3d5040bbc449c168235c479ecc269"
+
+# Temp replacement for showing child progress bars in right order
+[dependencies.indicatif]
+git = "https://github.com/strowk/indicatif"
+rev = "f2dc688fc6c577ecda6103d70e746ecdd3ca5579"
+features = ["in_memory"]
 
 [dev-dependencies]
 insta = { version = "1.43.1", features = ["filters"] }
