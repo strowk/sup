@@ -38,7 +38,7 @@ impl Pulling {
         let mut cb = git2::RemoteCallbacks::new();
 
         let progress_style = ProgressStyle::with_template(
-            "{elapsed:>4.bold.dim} {msg} {wide_bar:.cyan/blue} {pos:>7}/{len:7}  ",
+            "{elapsed:>4.bold.dim} {msg} ({percent}%) {wide_bar:.cyan/blue} {pos:>7}/{len:7}  ",
         )
         .unwrap()
         .progress_chars("=>-");
@@ -69,7 +69,7 @@ impl Pulling {
                 match stats.received_bytes().try_into() {
                     Ok(received_bytes) => {
                         processing_objects_span.pb_set_message(&format!(
-                            "Receiving objects ({})  ",
+                            "Receiving objects ({})",
                             indicatif::HumanBytes(received_bytes)
                         ));
                     }
