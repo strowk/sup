@@ -1,6 +1,8 @@
 # `sup`: Trunk Based Development CLI tool
 
-`sup` does `git stash && git pull && git stash pop` with recovery (`--abort` and `--continue`)
+`sup` does `git stash && git pull && git stash pop` with recovery (`--abort` and `--continue`).
+
+`sup -m 'here be dragons'` also adds `git commit -m 'here be dragons' && git push` to the above.
 
 `sup` is a command-line tool for safely synchronizing your local git repository with its remote, even when you have uncommitted or untracked changes. It automates the process of stashing, pulling, and restoring your work, and provides robust handling for conflicts and interruptions.
 
@@ -21,6 +23,7 @@ sup --continue     # Continue after resolving a conflict
 sup --abort        # Abort and restore previous state
 sup --message "Your commit message"  # Stash, pull, restore, and commit with a message
 sup -m "Your commit message"  # Short form for --message
+sup -m "Your commit message" --no-verify  # Commit and skip pre-commit/pre-push hooks
 ```
 
 ### Typical Workflow
