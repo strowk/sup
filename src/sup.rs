@@ -586,10 +586,6 @@ fn apply_stash_and_commit(
 fn commit_stashed_changes(ui: &mut UI, repo: &Repository, msg: &str) -> Result<()> {
     ui.configure_committing_stashed_changes_progress_bar(&Span::current());
     // Run pre-commit hook if present, must suspend progress bar
-
-    // if let Err(e) =
-    // tracing_indicatif::suspend_tracing_indicatif(|| hooks::run_hook(repo, "pre-commit", &[]))
-    // {
     if let Err(e) = hooks::run_hook(repo, "pre-commit", &[]) {
         error!("pre-commit hook failed: {}", e);
         SupState::Idle.save()?;
@@ -599,11 +595,7 @@ fn commit_stashed_changes(ui: &mut UI, repo: &Repository, msg: &str) -> Result<(
     let mut commit_msg_file = tempfile::NamedTempFile::new()?;
     commit_msg_file.write_all(msg.as_bytes())?;
     let commit_msg_path = commit_msg_file.path().to_str().unwrap();
-    if let Err(e) = hooks::run_hook(repo, "commit-msg", &[commit_msg_path])
-    // tracing_indicatif::suspend_tracing_indicatif(|| {
-    //     hooks::run_hook(repo, "commit-msg", &[commit_msg_path])
-    // })
-    {
+    if let Err(e) = hooks::run_hook(repo, "commit-msg", &[commit_msg_path]) {
         error!("commit-msg hook failed: {}", e);
         SupState::Idle.save()?;
         return Err(e);
@@ -650,9 +642,6 @@ fn stage_and_commit_with_hooks(
 
 fn push(repo: &Repository, branch: &str) -> anyhow::Result<()> {
     // Run pre-push hook if present
-    // tracing_indicatif::suspend_tracing_indicatif(|| {
-    // hooks::run_hook(repo, "pre-push", &["origin"])
-    // })?;
     hooks::run_hook(repo, "pre-push", &["origin"])?;
     let mut remote = repo.find_remote("origin")?;
     let refspec = format!("refs/heads/{branch}:refs/heads/{branch}");
@@ -672,18 +661,11 @@ fn push(repo: &Repository, branch: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-struct UI {
-    style: ProgressStyle,
-}
+struct UI {}
 
 impl UI {
     fn new() -> Self {
-        UI {
-            style: ProgressStyle::with_template(
-                "{elapsed:>4.bold.dim} {spinner:.green} {wide_msg}  ",
-            )
-            .expect("Failed to parse progress style"),
-        }
+        UI {}
     }
 
     fn log_completed(&self) {
@@ -692,19 +674,16 @@ impl UI {
 
     fn configure_stashing_progress(&self, span: &Span) {
         span.pb_set_message("Stashing local changes");
-        span.pb_set_style(&self.style);
         span.pb_set_finish_message(&format!("{FLOPPY_DISK}Stashed local changes"));
     }
 
     fn configure_applying_stash_progress(&self, span: &Span) {
         span.pb_set_message("Applying stashed changes");
-        span.pb_set_style(&self.style);
         span.pb_set_finish_message(&format!("{BOX}Applied stashed changes"));
     }
 
     fn configure_pulling_progress(&self, span: &Span) {
         span.pb_set_message("Pulling remote changes");
-        span.pb_set_style(&self.style);
         span.pb_set_finish_message(&format!("{DOWN_ARROW}Pulled remote changes"));
     }
 
@@ -716,7 +695,6 @@ impl UI {
         span.pb_set_message(&format!(
             "Resetting branch to original commit before pull: {orig_head}"
         ));
-        span.pb_set_style(&self.style);
         span.pb_set_finish_message(&format!(
             "{FLOPPY_DISK}Reset branch to commit before pull: {orig_head}"
         ));
@@ -724,19 +702,16 @@ impl UI {
 
     fn configure_restoring_stashed_changes_for_abort_progress(&mut self, span: &Span) {
         span.pb_set_message("Restoring stashed changes after abort");
-        span.pb_set_style(&self.style);
         span.pb_set_finish_message(&format!("{BOX}Restored stashed changes"));
     }
 
     fn configure_committing_stashed_changes_progress_bar(&mut self, span: &Span) {
         span.pb_set_message("Committing stashed changes");
-        span.pb_set_style(&self.style);
         span.pb_set_finish_message(&format!("{CHECKMARK}Committed stashed changes"));
     }
 
     fn configure_pushing_progress(&mut self, span: &Span, branch: &str) {
         span.pb_set_message(&format!("Pushing branch '{branch}'"));
-        span.pb_set_style(&self.style);
         span.pb_set_finish_message(&format!("{ROCKET}Pushed branch '{branch}'"));
     }
 
@@ -746,7 +721,6 @@ impl UI {
 
     fn configure_finishing_merge_progress(&mut self, span: &Span) {
         span.pb_set_message("Finishing merge in progress (creating merge commit)");
-        span.pb_set_style(&self.style);
         span.pb_set_finish_message(&format!("{FLOPPY_DISK}Finished merge commit"));
     }
 }
