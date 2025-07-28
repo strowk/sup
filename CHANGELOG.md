@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+WIP
+
+## [0.2.1] - 2025-07-28
+
 ### Changed
 
 - Return exit code 1 when `sup` is interrupted with Ctrl+C, instead of 0.
@@ -122,7 +126,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - Basic functionality to stash uncommitted changes, pull from remote, and restore changes.
 
 <!-- next-url -->
-[Unreleased]: https://github.com/strowk/sup/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/strowk/sup/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/strowk/sup/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/strowk/sup/compare/v0.1.9...v0.2.0
 [0.1.9]: https://github.com/strowk/sup/compare/v0.1.8...v0.1.9
 [0.1.8]: https://github.com/strowk/sup/compare/v0.1.7...v0.1.8
