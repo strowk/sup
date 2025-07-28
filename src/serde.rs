@@ -1,11 +1,11 @@
-use serde::{Deserialize, Serialize};
 use crate::sup::SupState;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub(crate) enum SupStateSerde {
     Idle,
-    InProgress(bool, Option<String>, Option<String>),
-    Interrupted(bool, Option<String>, Option<String>, bool),
+    InProgress(bool, String, Option<String>),
+    Interrupted(bool, String, Option<String>, bool),
 }
 
 impl From<SupState> for SupStateSerde {

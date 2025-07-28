@@ -1,4 +1,5 @@
 use crate::hooks;
+use crate::serde::SupStateSerde;
 use crate::ui::UI;
 use anyhow::{Context, Result};
 use git2::{ErrorCode, Repository, StashFlags};
@@ -20,7 +21,6 @@ use tracing_indicatif::IndicatifLayer;
 use tracing_subscriber::filter::Targets;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use crate::serde::SupStateSerde;
 
 const STATE_FILE: &str = ".git/sup_state";
 const LOCK_FILE: &str = ".git/sup.lock";
@@ -35,13 +35,13 @@ pub(crate) enum SupState {
     Idle,
     InProgress {
         stash_created: bool,
-        original_head: Option<String>,
+        original_head: String,
         message: Option<String>,
     },
     Interrupted {
         stash_created: bool,
         stash_applied: bool,
-        original_head: Option<String>,
+        original_head: String,
         message: Option<String>,
     },
 }
@@ -152,11 +152,8 @@ pub fn run_sup(
             } => {
                 let mut ui = UI::new();
                 ui.log_abort();
-                if let Some(ref orig_head) = original_head {
-                    let mut repo =
-                        Repository::open(".").context("failed to open git repository")?;
-                    reset_repo(&mut ui, &mut repo, orig_head)?;
-                }
+                let mut repo = Repository::open(".").context("failed to open git repository")?;
+                reset_repo(&mut ui, &mut repo, &original_head)?;
 
                 // Restore stashed changes if any
                 if stash_created {
@@ -362,10 +359,15 @@ fn pull_changes(
     ui: &mut UI,
     stash_created: bool,
     message: &Option<String>,
-) -> Result<Option<String>> {
+) -> Result<String> {
     ui.configure_pulling_progress(&Span::current());
+    let original_head = match repo.head()?.target() {
+        Some(id) => Ok(id.to_string()),
+        None => Err(anyhow::format_err!(
+            "Cannot determine original head for pull"
+        )),
+    }?;
 
-    let original_head = Some(repo.head()?.target().map(|oid| oid.to_string())).flatten();
     if std::env::var("PULL_WITH_CLI").is_ok() {
         let status = std::process::Command::new("git").arg("pull").status()?;
         if !status.success() {
@@ -462,7 +464,7 @@ fn apply_stash_and_commit(
     repo: &mut Repository,
     stash_created: bool,
     stash_applied: bool,
-    original_head: &Option<String>,
+    original_head: &str,
     message: &Option<String>,
     ui: &mut UI,
     yes: bool,
@@ -502,7 +504,7 @@ fn apply_stash_and_commit(
                 error!("Conflicts detected after stash apply");
                 SupState::Interrupted {
                     stash_created,
-                    original_head: original_head.clone(),
+                    original_head: original_head.to_string(),
                     message: message.clone(),
                     stash_applied: true,
                 }
@@ -520,7 +522,7 @@ fn apply_stash_and_commit(
             error!("Failed to apply stash: {}", e);
             SupState::Interrupted {
                 stash_created,
-                original_head: original_head.clone(),
+                original_head: original_head.to_string(),
                 message: message.clone(),
                 stash_applied: true,
             }
@@ -539,7 +541,8 @@ fn commit_stashed_changes(
     no_verify: bool,
 ) -> Result<()> {
     ui.configure_committing_stashed_changes_progress_bar(&Span::current());
-    if !no_verify { // --no-verify skips pre-commit hook
+    if !no_verify {
+        // --no-verify skips pre-commit hook
         // Run pre-commit hook if present, must suspend progress bar
         if let Err(e) = hooks::run_hook(repo, "pre-commit", &[]) {
             error!("pre-commit hook failed: {}", e);
@@ -599,7 +602,8 @@ fn stage_and_commit_with_hooks(
 
 fn push(repo: &Repository, branch: &str, no_verify: bool) -> anyhow::Result<()> {
     // Run pre-push hook if present
-    if !no_verify { // --no-verify skips pre-push hook
+    if !no_verify {
+        // --no-verify skips pre-push hook
         hooks::run_hook(repo, "pre-push", &["origin"])?;
     }
     let mut remote = repo.find_remote("origin")?;
@@ -619,4 +623,3 @@ fn push(repo: &Repository, branch: &str, no_verify: bool) -> anyhow::Result<()> 
 
     Ok(())
 }
-
