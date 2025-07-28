@@ -17,7 +17,7 @@ impl UI {
     }
 
     pub(crate) fn log_completed(&self) {
-        println!("     {CHECKMARK}Operation completed");
+        println!("       {CHECKMARK}Operation completed");
     }
 
     pub(crate) fn configure_stashing_progress(&self, span: &Span) {
