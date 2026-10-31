@@ -8,7 +8,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
-WIP
+### Fixed
+
+- Only show 'Merged branch' when a merge actually happened.
 
 ## [0.2.1] - 2025-07-28
 
