@@ -262,7 +262,8 @@ impl Pulling {
         remote_branch: &str,
         fetch_commit: git2::AnnotatedCommit<'a>,
     ) -> Result<(), git2::Error> {
-        configure_merge_progress(&Span::current(), remote_branch);
+        let span = Span::current();
+        span.pb_set_message("Merging changes");
 
         // 1. do a merge analysis
         let analysis = repo.merge_analysis(&[&fetch_commit])?;
@@ -296,11 +297,13 @@ impl Pulling {
                     ))?;
                 }
             };
+            set_merge_finish_message(&span, remote_branch);
         } else if analysis.0.is_normal() {
             tracing::debug!("Doing a normal merge");
             // do a normal merge
             let head_commit = repo.reference_to_annotated_commit(&repo.head()?)?;
             self.normal_merge(repo, &head_commit, &fetch_commit)?;
+            set_merge_finish_message(&span, remote_branch);
         } else {
             tracing::debug!("Nothing to merge, continue");
         }
@@ -325,7 +328,6 @@ impl Pulling {
 
 static MERGE: Emoji<'_, '_> = Emoji("🔀  ", "");
 
-fn configure_merge_progress(span: &Span, remote_branch: &str) {
-    span.pb_set_message("Merging changes");
+fn set_merge_finish_message(span: &Span, remote_branch: &str) {
     span.pb_set_finish_message(&format!("{MERGE}Merged branch {remote_branch}"));
 }
