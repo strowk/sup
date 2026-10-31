@@ -2,18 +2,18 @@ Origin: github.com/strowk/sup
 Label: github.com/strowk/sup
 Suite: stable
 Codename: any
-Date: Mon, 28 Jul 2025 00:27:24 UTC
+Date: Sat, 31 Oct 2026 19:22:41 UTC
 Architectures: amd64
 Components: main
 MD5Sum:
- 4452f2d664daebdd3a9858be8fcf6ba9 529 main/binary-amd64/Packages
- 66d1465e542e085381085c8b03d4654b 403 main/binary-amd64/Packages.gz
+ de5323231969a082c8e35e8e7932eb3f 529 main/binary-amd64/Packages
+ 0c7e130cc1b3deaa8ef334525d8ea89b 405 main/binary-amd64/Packages.gz
  baf780a891a3cab78947f28ac9020673 111 main/binary-amd64/Release
 SHA1:
- 39aadfd64a37bd6895011c436eee52767b232f9a 529 main/binary-amd64/Packages
- 9e6845e191d7ee7f6ddc7c6854dd20da1d284a86 403 main/binary-amd64/Packages.gz
+ 9ff8171b1ef553b6f1075403b6781102f4a55724 529 main/binary-amd64/Packages
+ 03ad466b4dd3aefaba116649505a47adeab39564 405 main/binary-amd64/Packages.gz
  b3424c21f77aea637c47578510b049e611d5436c 111 main/binary-amd64/Release
 SHA256:
- b3c45fa0979f3812a9cc97a1d1e4db882c4330ea8f262e23d5b21d37904babc3 529 main/binary-amd64/Packages
- 95a3d30ba6479fdf7fc5eae12679e302a6bf66cf176e43b4fbe16945a27a0042 403 main/binary-amd64/Packages.gz
+ 327073b9fac1693c930573665f9d75087ee696a849b1729116ad24f5b51b08c5 529 main/binary-amd64/Packages
+ 025f27eee7ddf65b6bcb277c4bae680b98e07697b90fea1fac8b630d7e4d8a1e 405 main/binary-amd64/Packages.gz
  953ebaf2ab550f9b5086006d9bbe4f857c9875a2a662587799cf9bf0b7e9d749 111 main/binary-amd64/Release
