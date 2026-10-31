@@ -8,7 +8,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
-WIP
+### Fixed
+
+- Pin the `cross` linux-gnu build images to an older glibc (Ubuntu 20.04) so the
+  released binary links against glibc available in the Debian 12 packaging base,
+  fixing the failing Debian/APT repository publishing step.
 
 ## [0.2.2] - 2026-10-31
 
