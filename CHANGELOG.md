@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+WIP
+
+## [0.2.3] - 2026-10-31
+
 ### Fixed
 
 - Pin the `cross` linux-gnu build images to an older glibc (Ubuntu 20.04) so the
@@ -136,7 +140,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - Basic functionality to stash uncommitted changes, pull from remote, and restore changes.
 
 <!-- next-url -->
-[Unreleased]: https://github.com/strowk/sup/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/strowk/sup/compare/v0.2.3...HEAD
+[0.2.3]: https://github.com/strowk/sup/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/strowk/sup/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/strowk/sup/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/strowk/sup/compare/v0.1.9...v0.2.0
