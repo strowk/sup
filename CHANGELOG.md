@@ -8,7 +8,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
-WIP
+### Fixed
+
+- Build the Debian package binary inside the `debian:12` base so it links
+  against that glibc and installs on Debian 12 and newer, fixing the failing
+  Debian/APT repository publishing step.
 
 ## [0.2.3] - 2026-10-31
 
